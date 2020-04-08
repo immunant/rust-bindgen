@@ -144,6 +144,7 @@ bool CXXMethod_isConst(const Decl *D);
 bool CXXMethod_isVirtual(const Decl *D);
 bool CXXMethod_isPureVirtual(const Decl *D);
 BindgenQualType Decl_getResultType(const Decl *D, ASTContext *);
+bool Decl_isDynamicClass(const Decl *);
 
 
 const Expr *Expr_getArgument(const Expr *E, unsigned i);
@@ -208,6 +209,8 @@ void Expr_visitChildren(const Expr *Parent, CXCursorKind kind, Visitor V,
 void CXXBaseSpecifier_visitChildren(const CXXBaseSpecifier *Parent,
                                     CXCursorKind kind, Visitor V, ASTUnit *Unit,
                                     CXClientData data);
+void CXXRecordDecl_visitVBases(const Decl *Parent, CXCursorKind kind, Visitor V,
+                               ASTUnit *Unit, CXClientData data);
 
 void tokenize(ASTUnit *TU, BindgenSourceRange Range, CXToken **Tokens,
               unsigned *NumTokens);
@@ -256,6 +259,9 @@ bool CXXBaseSpecifier_isVirtualBase(const CXXBaseSpecifier *);
 BindgenQualType CXXBaseSpecifier_getType(const CXXBaseSpecifier *);
 BindgenStringRef CXXBaseSpecifier_getSpelling(const CXXBaseSpecifier *);
 SourceLocation *CXXBaseSpecifier_getLocation(const CXXBaseSpecifier *);
+int64_t CXXRecordDecl_baseClassOffset(const Decl *, const CXXBaseSpecifier *, ASTContext *);
+const Decl *CXXRecordDecl_getPrimaryBase(const Decl *, ASTContext *);
+
 SourceLocation *Attr_getLocation(const Attr *);
 SourceLocation *PreprocessedEntity_getLocation(const PreprocessedEntity *);
 const FileEntry *PreprocessedEntity_getIncludedFile(const PreprocessedEntity *);

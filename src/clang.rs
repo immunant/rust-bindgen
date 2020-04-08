@@ -7,6 +7,7 @@
 use cexpr;
 use ir::context::BindgenContext;
 use regex;
+use std::convert::TryInto;
 use std::ffi::{CStr, CString};
 use std::fmt;
 use std::hash::Hash;
@@ -717,6 +718,25 @@ impl Cursor {
         found
     }
 
+    /// Visit all direct and indirect virtual bases of this class.
+    pub fn visit_virtual_bases<Visitor>(&self, mut visitor: Visitor)
+    where
+        Visitor: FnMut(Cursor) -> CXChildVisitResult,
+    {
+        match self.node {
+            ASTNode::Decl(d) => unsafe {
+                clang_interface::CXXRecordDecl_visitVBases(
+                    d,
+                    self.kind,
+                    Some(visit_children::<Visitor>),
+                    self.unit,
+                    mem::transmute(&mut visitor),
+                )
+            },
+            _ => {}
+        }
+    }
+
     /// Is the referent an inlined function?
     pub fn is_inlined_function(&self) -> bool {
         match self.node {
@@ -989,6 +1009,40 @@ impl Cursor {
                 clang_interface::CXXBaseSpecifier_isVirtualBase(b)
             },
             _ => false,
+        }
+    }
+
+    pub fn get_primary_base(&self) -> Option<Cursor> {
+        match self.node {
+            ASTNode::Decl(d) => unsafe {
+                let base = clang_interface::CXXRecordDecl_getPrimaryBase(d, self.context());
+                if !base.is_null() {
+                    return Some(self.with_node(ASTNode::Decl(base)));
+                }
+            },
+            _ => {}
+        }
+        None
+    }
+
+    /// Is this cursor's referent a dynamic class (i.e. has a virtual pointer)?
+    pub fn is_dynamic_class(&self) -> bool {
+        match self.node {
+            ASTNode::Decl(d) => unsafe {
+                clang_interface::Decl_isDynamicClass(d)
+            },
+            _ => false,
+        }
+    }
+
+    pub fn base_offset(&self, base: &Cursor) -> Option<usize> {
+        match (self.node, base.node) {
+            (ASTNode::Decl(d), ASTNode::CXXBaseSpecifier(b)) => unsafe {
+                clang_interface::CXXRecordDecl_baseClassOffset(d, b, self.context())
+                    .try_into()
+                    .ok()
+            },
+            _ => None,
         }
     }
 

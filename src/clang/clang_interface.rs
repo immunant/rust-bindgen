@@ -90,7 +90,7 @@ where
 pub const _GLIBCXX_CSTDINT: u32 = 1;
 pub const _GLIBCXX_CXX_CONFIG_H: u32 = 1;
 pub const _GLIBCXX_RELEASE: u32 = 9;
-pub const __GLIBCXX__: u32 = 20200130;
+pub const __GLIBCXX__: u32 = 20200312;
 pub const _GLIBCXX_HAVE_ATTRIBUTE_VISIBILITY: u32 = 1;
 pub const _GLIBCXX_USE_DEPRECATED: u32 = 1;
 pub const _GLIBCXX_EXTERN_TEMPLATE: u32 = 1;
@@ -7059,6 +7059,9 @@ extern "C" {
     ) -> BindgenQualType;
 }
 extern "C" {
+    pub fn Decl_isDynamicClass(arg1: *const clang_Decl) -> bool;
+}
+extern "C" {
     pub fn Expr_getArgument(
         E: *const clang_Expr,
         i: ::std::os::raw::c_uint,
@@ -7266,6 +7269,15 @@ extern "C" {
     );
 }
 extern "C" {
+    pub fn CXXRecordDecl_visitVBases(
+        Parent: *const clang_Decl,
+        kind: CXCursorKind::Type,
+        V: Visitor,
+        Unit: *mut clang_ASTUnit,
+        data: CXClientData,
+    );
+}
+extern "C" {
     pub fn tokenize(
         TU: *mut clang_ASTUnit,
         Range: BindgenSourceRange,
@@ -7450,6 +7462,19 @@ extern "C" {
     pub fn CXXBaseSpecifier_getLocation(
         arg1: *const clang_CXXBaseSpecifier,
     ) -> *mut clang_SourceLocation;
+}
+extern "C" {
+    pub fn CXXRecordDecl_baseClassOffset(
+        arg1: *const clang_Decl,
+        arg2: *const clang_CXXBaseSpecifier,
+        arg3: *mut clang_ASTContext,
+    ) -> i64;
+}
+extern "C" {
+    pub fn CXXRecordDecl_getPrimaryBase(
+        arg1: *const clang_Decl,
+        arg2: *mut clang_ASTContext,
+    ) -> *const clang_Decl;
 }
 extern "C" {
     pub fn Attr_getLocation(

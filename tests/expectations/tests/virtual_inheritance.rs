@@ -37,6 +37,7 @@ pub struct B__bindgen_vtable(::std::os::raw::c_void);
 pub struct B {
     pub vtable_: *const B__bindgen_vtable,
     pub bar: ::std::os::raw::c_int,
+    pub foo: ::std::os::raw::c_int,
 }
 #[test]
 fn bindgen_test_layout_B() {
@@ -68,6 +69,7 @@ pub struct C__bindgen_vtable(::std::os::raw::c_void);
 pub struct C {
     pub vtable_: *const C__bindgen_vtable,
     pub baz: ::std::os::raw::c_int,
+    pub foo: ::std::os::raw::c_int,
 }
 #[test]
 fn bindgen_test_layout_C() {
@@ -95,9 +97,12 @@ impl Default for C {
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct D {
-    pub _base: C,
-    pub _base_1: B,
+    pub vtable_: *const C__bindgen_vtable,
+    pub baz: ::std::os::raw::c_int,
+    pub vtable_: *const B__bindgen_vtable,
+    pub bar: ::std::os::raw::c_int,
     pub bazz: ::std::os::raw::c_int,
+    pub foo: ::std::os::raw::c_int,
 }
 #[test]
 fn bindgen_test_layout_D() {

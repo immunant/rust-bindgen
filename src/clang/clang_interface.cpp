@@ -9,6 +9,7 @@
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/ExprObjC.h"
 #include "clang/AST/RecursiveASTVisitor.h"
+#include "clang/AST/RecordLayout.h"
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Basic/Version.h"
@@ -527,6 +528,16 @@ BindgenQualType Decl_getResultType(const Decl *D, ASTContext *Ctx) {
     return make_type_compatible(MD->getReturnType());
 
   return Type_getResultType(Decl_getType(D, Ctx));
+}
+
+bool Decl_isDynamicClass(const Decl *D) {
+  if (auto *ClassTemplate = dyn_cast_or_null<ClassTemplateDecl>(D))
+    D = ClassTemplate->getTemplatedDecl();
+  if (auto *C = dyn_cast_or_null<CXXRecordDecl>(D)) {
+    auto *Def = C->getDefinition();
+    return Def && Def->isDynamicClass();
+  }
+  return false;
 }
 
 BindgenStringRef Expr_getSpelling(const Expr *E) {
@@ -1483,6 +1494,21 @@ void CXXBaseSpecifier_visitChildren(const CXXBaseSpecifier *Parent,
   visitor.TraverseTypeLoc(Parent->getTypeSourceInfo()->getTypeLoc());
 #endif
 }
+void CXXRecordDecl_visitVBases(const Decl *D, CXCursorKind kind, Visitor VisitFn,
+                               ASTUnit *Unit, CXClientData data) {
+  if (auto *ClassTemplate = dyn_cast_or_null<ClassTemplateDecl>(D))
+    D = ClassTemplate->getTemplatedDecl();
+  auto *RD = dyn_cast_or_null<CXXRecordDecl>(D);
+  if (RD)
+    RD = RD->getDefinition();
+  if (!RD)
+    return;
+
+  for (auto &Base : RD->vbases()) {
+    if (VisitFn(Node(&Base), Node(D, kind), Unit, data) == CXChildVisit_Break)
+      return;
+  }
+}
 
 void disposeTokens(const ASTUnit *TU, CXToken *Tokens, unsigned NumTokens) {
   delete[] Tokens;
@@ -1677,6 +1703,44 @@ SourceLocation *CXXBaseSpecifier_getLocation(const CXXBaseSpecifier *B) {
 #else // CLANG_VERSION_MAJOR <= 4
   return new SourceLocation(B->getLocStart());
 #endif
+}
+
+static const CXXRecordDecl *GetCXXRecordDeclForLayout(const Decl *D, ASTContext *Context) {
+  if (auto *ClassTemplate = dyn_cast_or_null<ClassTemplateDecl>(D))
+    D = ClassTemplate->getTemplatedDecl();
+  auto *RD = dyn_cast_or_null<CXXRecordDecl>(D);
+  if (RD)
+    RD = RD->getDefinition();
+  if (!RD || RD->isInvalidDecl() || !RD->isCompleteDefinition() || RD->hasAnyDependentBases())
+    return nullptr;
+
+  // If this is a templated class but not an instantiation, then we can't lay it
+  // out.
+  auto RT = Context->getRecordType(RD);
+  if (RT->isDependentType() && !RT->getAs<TemplateSpecializationType>())
+    return nullptr;
+
+  return RD;
+}
+
+int64_t CXXRecordDecl_baseClassOffset(const Decl *D, const CXXBaseSpecifier *B, ASTContext *Context) {
+  auto *RD = GetCXXRecordDeclForLayout(D, Context);
+  if (!RD)
+    return -1;
+  const ASTRecordLayout &Layout = Context->getASTRecordLayout(RD);
+
+  if (B->isVirtual())
+    return Layout.getVBaseClassOffset(B->getType()->getAsCXXRecordDecl()).getQuantity();
+  else
+    return Layout.getBaseClassOffset(B->getType()->getAsCXXRecordDecl()).getQuantity();
+}
+
+const Decl *CXXRecordDecl_getPrimaryBase(const Decl *D, ASTContext *Context) {
+  auto *RD = GetCXXRecordDeclForLayout(D, Context);
+  if (!RD)
+    return nullptr;
+  const ASTRecordLayout &Layout = Context->getASTRecordLayout(RD);
+  return Layout.getPrimaryBase();
 }
 
 SourceLocation *Attr_getLocation(const Attr *A) {

@@ -19,10 +19,10 @@ use ir::analysis::{HasVtable, Sizedness};
 use ir::annotations::FieldAccessorKind;
 use ir::comment;
 use ir::comp::{
-    Base, Bitfield, BitfieldUnit, CompInfo, CompKind, Field, FieldData,
-    FieldMethods, Method, MethodKind,
+    Base, BaseKind, Bitfield, BitfieldUnit, CompInfo, CompKind, Field,
+    FieldData, FieldMethods, Method, MethodKind,
 };
-use ir::context::{BindgenContext, ItemId};
+use ir::context::{BindgenContext, ItemId, TypeId};
 use ir::derive::{
     CanDerive, CanDeriveCopy, CanDeriveDebug, CanDeriveDefault, CanDeriveEq,
     CanDeriveHash, CanDeriveOrd, CanDerivePartialEq, CanDerivePartialOrd,
@@ -137,6 +137,10 @@ struct CodegenResult<'a> {
     functions_seen: HashSet<String>,
     vars_seen: HashSet<String>,
 
+    /// VTables that we have generated, indexed by ID of their corresponding
+    /// class item.
+    vtables_seen: HashSet<String>,
+
     /// Used for making bindings to overloaded functions. Maps from a canonical
     /// function name to the number of overloads we have already codegen'd for
     /// that name. This lets us give each overload a unique suffix.
@@ -156,6 +160,7 @@ impl<'a> CodegenResult<'a> {
             items_seen: Default::default(),
             functions_seen: Default::default(),
             vars_seen: Default::default(),
+            vtables_seen: Default::default(),
             overload_counters: Default::default(),
         }
     }
@@ -212,6 +217,14 @@ impl<'a> CodegenResult<'a> {
 
     fn saw_var(&mut self, name: &str) {
         self.vars_seen.insert(name.into());
+    }
+
+    fn seen_vtable(&self, name: &str) -> bool {
+        self.vtables_seen.contains(name)
+    }
+
+    fn saw_vtable(&mut self, name: &str) {
+        self.vtables_seen.insert(name.into());
     }
 
     fn inner<F>(&mut self, cb: F) -> Vec<proc_macro2::TokenStream>
@@ -910,9 +923,16 @@ impl<'a> CodeGenerator for Vtable<'a> {
         assert_eq!(item.id(), self.item_id);
         debug_assert!(item.is_enabled_for_codegen(ctx));
 
+        let canonical_name = self.canonical_name(ctx);
+
+        if result.seen_vtable(&canonical_name) {
+            return;
+        }
+        result.saw_vtable(&canonical_name);
+
         // For now, generate an empty struct, later we should generate function
         // pointers and whatnot.
-        let name = ctx.rust_ident(&self.canonical_name(ctx));
+        let name = ctx.rust_ident(&canonical_name);
         let void = helpers::ast_ty::c_void(ctx);
         result.push(quote! {
             #[repr(C)]
@@ -970,6 +990,9 @@ impl CodeGenerator for TemplateInstantiation {
             return;
         }
 
+        // TODO: We generated a unique test for each instantiation location even
+        // if the template instantiation is identical. These need collapsing.
+
         let layout = item.kind().expect_type().layout(ctx);
 
         if let Some(layout) = layout {
@@ -1023,6 +1046,7 @@ trait FieldCodegen<'a> {
         codegen_depth: usize,
         accessor_kind: FieldAccessorKind,
         parent: &CompInfo,
+        template_args: &HashMap<TypeId, TypeId>,
         result: &mut CodegenResult,
         struct_layout: &mut StructLayoutTracker,
         fields: &mut F,
@@ -1043,6 +1067,7 @@ impl<'a> FieldCodegen<'a> for Field {
         codegen_depth: usize,
         accessor_kind: FieldAccessorKind,
         parent: &CompInfo,
+        template_args: &HashMap<TypeId, TypeId>,
         result: &mut CodegenResult,
         struct_layout: &mut StructLayoutTracker,
         fields: &mut F,
@@ -1060,6 +1085,7 @@ impl<'a> FieldCodegen<'a> for Field {
                     codegen_depth,
                     accessor_kind,
                     parent,
+                    template_args,
                     result,
                     struct_layout,
                     fields,
@@ -1074,6 +1100,7 @@ impl<'a> FieldCodegen<'a> for Field {
                     codegen_depth,
                     accessor_kind,
                     parent,
+                    template_args,
                     result,
                     struct_layout,
                     fields,
@@ -1095,6 +1122,7 @@ impl<'a> FieldCodegen<'a> for FieldData {
         codegen_depth: usize,
         accessor_kind: FieldAccessorKind,
         parent: &CompInfo,
+        template_args: &HashMap<TypeId, TypeId>,
         result: &mut CodegenResult,
         struct_layout: &mut StructLayoutTracker,
         fields: &mut F,
@@ -1110,8 +1138,10 @@ impl<'a> FieldCodegen<'a> for FieldData {
 
         let field_item =
             self.ty().into_resolver().through_type_refs().resolve(ctx);
-        let field_ty = field_item.expect_type();
-        let mut ty = self.ty().to_rust_ty_or_opaque(ctx, &());
+        let ty_id = field_item.id().expect_type_id(ctx);
+        let ty_id = template_args.get(&ty_id).copied().unwrap_or_else(|| ty_id);
+        let field_ty = ctx.resolve_type(ty_id);
+        let mut ty = ty_id.to_rust_ty_or_opaque(ctx, &());
         ty.append_implicit_template_params(ctx, field_item);
 
         // NB: If supported, we use proper `union` types.
@@ -1301,6 +1331,7 @@ impl<'a> FieldCodegen<'a> for BitfieldUnit {
         codegen_depth: usize,
         accessor_kind: FieldAccessorKind,
         parent: &CompInfo,
+        template_args: &HashMap<TypeId, TypeId>,
         result: &mut CodegenResult,
         struct_layout: &mut StructLayoutTracker,
         fields: &mut F,
@@ -1367,6 +1398,7 @@ impl<'a> FieldCodegen<'a> for BitfieldUnit {
                 codegen_depth,
                 accessor_kind,
                 parent,
+                template_args,
                 result,
                 struct_layout,
                 fields,
@@ -1435,6 +1467,7 @@ impl<'a> FieldCodegen<'a> for Bitfield {
         _codegen_depth: usize,
         _accessor_kind: FieldAccessorKind,
         parent: &CompInfo,
+        template_args: &HashMap<TypeId, TypeId>,
         _result: &mut CodegenResult,
         _struct_layout: &mut StructLayoutTracker,
         _fields: &mut F,
@@ -1449,7 +1482,8 @@ impl<'a> FieldCodegen<'a> for Bitfield {
         let setter_name = bitfield_setter_name(ctx, self);
         let unit_field_ident = Ident::new(unit_field_name, Span::call_site());
 
-        let bitfield_ty_item = ctx.resolve_item(self.ty());
+        let ty_id = template_args.get(&self.ty()).copied().unwrap_or_else(|| self.ty());
+        let bitfield_ty_item = ctx.resolve_item(ty_id);
         let bitfield_ty = bitfield_ty_item.expect_type();
 
         let bitfield_ty_layout = bitfield_ty
@@ -1526,6 +1560,169 @@ impl<'a> FieldCodegen<'a> for Bitfield {
     }
 }
 
+impl CompInfo {
+    fn lay_out_fields<'a, F, M>(
+        &self,
+        ctx: &BindgenContext,
+        result: &mut CodegenResult<'a>,
+        item: &Item,
+        struct_layout: &mut StructLayoutTracker,
+        fields: &mut F,
+        methods: &mut M,
+        include_virtual_bases: bool,
+    ) where
+        F: Extend<proc_macro2::TokenStream>,
+        M: Extend<proc_macro2::TokenStream>,
+    {
+        if self.is_dynamic_class() && self.primary_base().is_none() {
+            // We don't have a primary base class but still need a vtable
+            // pointer.
+            let vtable =
+                Vtable::new(item.id(), self.methods(), self.base_members());
+            vtable.codegen(ctx, result, item);
+
+            let vtable_type = vtable
+                .try_to_rust_ty(ctx, &())
+                .expect("vtable to Rust type conversion is infallible")
+                .to_ptr(true);
+
+            fields.extend(Some(quote! {
+                pub vtable_: #vtable_type ,
+            }));
+
+            struct_layout.saw_vtable();
+        }
+
+        let has_virtual_bases = !self.virtual_bases().is_empty();
+
+        let mut nonvirtual_bases = self.base_members()
+            .into_iter()
+            .filter(|base| base.kind == BaseKind::Normal)
+            .collect::<Vec<_>>();
+
+        nonvirtual_bases.sort_by(|base1, base2| {
+            return base1.offset.partial_cmp(&base2.offset).unwrap()
+        });
+
+        for base in nonvirtual_bases {
+            // TODO: Do we want to always emit base class fields inline? I think
+            // we're going to need to since the vtable pointer type will differ
+            // once we emit proper vtable types. If so, remove the else side of
+            // this branch.
+            if has_virtual_bases {
+                let base_item = base.ty
+                    .into_resolver()
+                    .through_type_refs()
+                    .resolve(ctx);
+                let base_info = base_item
+                    .expect_type()
+                    .canonical_type(ctx)
+                    .as_comp()
+                    .expect("Base was not a composite type?");
+                base_info.lay_out_fields(
+                    ctx,
+                    result,
+                    base_item,
+                    struct_layout,
+                    fields,
+                    methods,
+                    false,
+                );
+
+                struct_layout.saw_base(base_item.expect_type());
+            } else {
+                if !base.requires_storage(ctx) {
+                    continue;
+                }
+
+                let inner_item = ctx.resolve_item(base.ty);
+                let mut inner = inner_item.to_rust_ty_or_opaque(ctx, &());
+                inner.append_implicit_template_params(ctx, &inner_item);
+                let field_name = ctx.rust_ident(&base.field_name);
+
+                fields.extend(Some(quote! {
+                    pub #field_name: #inner,
+                }));
+
+                struct_layout.saw_base(inner_item.expect_type());
+            }
+        }
+
+        let template_args = match item.expect_type().kind() {
+            TypeKind::TemplateInstantiation(instantiation) => {
+                let templated_class_id = instantiation.template_definition();
+                item.expect_type()
+                    .canonical_type(ctx)
+                    .self_template_params(ctx)
+                    .into_iter()
+                    .zip(instantiation.template_arguments().into_iter().copied())
+                    // Only pass type arguments for the type parameters that
+                    // the def uses.
+                    .filter(|&(param, _)| {
+                        ctx.uses_template_parameter(templated_class_id.into(), param)
+                    })
+                    .collect::<HashMap<_, _>>()
+            },
+            _ => HashMap::default(),
+        };
+
+        let codegen_depth = item.codegen_depth(ctx);
+        let fields_should_be_private =
+            item.annotations().private_fields().unwrap_or(false);
+        let struct_accessor_kind = item
+            .annotations()
+            .accessor_kind()
+            .unwrap_or(FieldAccessorKind::None);
+        for field in self.fields() {
+            field.codegen(
+                ctx,
+                fields_should_be_private,
+                codegen_depth,
+                struct_accessor_kind,
+                self,
+                &template_args,
+                result,
+                struct_layout,
+                fields,
+                methods,
+                (),
+            );
+        }
+
+        // Lay out virtual bases
+        if include_virtual_bases {
+            let mut virtual_bases = self.virtual_bases().to_vec();
+
+            virtual_bases.sort_by_key(|base| base.offset);
+
+            virtual_bases.dedup_by_key(|base| base.offset);
+
+            for base in virtual_bases {
+                let base_item = base.ty
+                    .into_resolver()
+                    .through_type_refs()
+                    .resolve(ctx);
+                let base_info = base_item
+                    .expect_type()
+                    .canonical_type(ctx)
+                    .as_comp()
+                    .expect("Base was not a composite type?");
+                base_info.lay_out_fields(
+                    ctx,
+                    result,
+                    base_item,
+                    struct_layout,
+                    fields,
+                    methods,
+                    false,
+                );
+
+                struct_layout.saw_base(base_item.expect_type());
+            }
+        }
+    }
+}
+
 impl CodeGenerator for CompInfo {
     type Extra = Item;
 
@@ -1568,65 +1765,23 @@ impl CodeGenerator for CompInfo {
         let mut struct_layout =
             StructLayoutTracker::new(ctx, self, ty, &canonical_name);
 
-        if !is_opaque {
-            if item.has_vtable_ptr(ctx) {
-                let vtable =
-                    Vtable::new(item.id(), self.methods(), self.base_members());
-                vtable.codegen(ctx, result, item);
+        // This layout computation is derived from the logic in
+        // RecordLayoutBuilder.cpp
 
-                let vtable_type = vtable
-                    .try_to_rust_ty(ctx, &())
-                    .expect("vtable to Rust type conversion is infallible")
-                    .to_ptr(true);
-
-                fields.push(quote! {
-                    pub vtable_: #vtable_type ,
-                });
-
-                struct_layout.saw_vtable();
-            }
-
-            for base in self.base_members() {
-                if !base.requires_storage(ctx) {
-                    continue;
-                }
-
-                let inner_item = ctx.resolve_item(base.ty);
-                let mut inner = inner_item.to_rust_ty_or_opaque(ctx, &());
-                inner.append_implicit_template_params(ctx, &inner_item);
-                let field_name = ctx.rust_ident(&base.field_name);
-
-                struct_layout.saw_base(inner_item.expect_type());
-
-                fields.push(quote! {
-                    pub #field_name: #inner,
-                });
-            }
-        }
+        // TODO: Handle Microsft C++ ABI, or at least check that we aren't
+        // trying to codegen for windows.
 
         let mut methods = vec![];
         if !is_opaque {
-            let codegen_depth = item.codegen_depth(ctx);
-            let fields_should_be_private =
-                item.annotations().private_fields().unwrap_or(false);
-            let struct_accessor_kind = item
-                .annotations()
-                .accessor_kind()
-                .unwrap_or(FieldAccessorKind::None);
-            for field in self.fields() {
-                field.codegen(
-                    ctx,
-                    fields_should_be_private,
-                    codegen_depth,
-                    struct_accessor_kind,
-                    self,
-                    result,
-                    &mut struct_layout,
-                    &mut fields,
-                    &mut methods,
-                    (),
-                );
-            }
+            self.lay_out_fields(
+                ctx,
+                result,
+                item,
+                &mut struct_layout,
+                &mut fields,
+                &mut methods,
+                true,
+            );
         }
 
         let is_union = self.kind() == CompKind::Union;
