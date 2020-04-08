@@ -8,7 +8,17 @@
 )]
 
 #[repr(C)]
-pub struct Foo__bindgen_vtable(::std::os::raw::c_void);
+pub struct Foo__bindgen_vtable {
+    _offset_to_top_0: isize,
+    _rtti: *const ::std::os::raw::c_void,
+    Bar: ::std::option::Option<
+        unsafe extern "C" fn(this: *mut ::std::os::raw::c_void),
+    >,
+    _complete_destructor:
+        ::std::option::Option<unsafe extern "C" fn(this: *mut Foo)>,
+    _deleting_destructor:
+        ::std::option::Option<unsafe extern "C" fn(this: *mut Foo)>,
+}
 #[repr(C)]
 #[derive(Debug)]
 pub struct Foo {

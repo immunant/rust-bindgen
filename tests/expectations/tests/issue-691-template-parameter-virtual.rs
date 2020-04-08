@@ -8,7 +8,13 @@
 )]
 
 #[repr(C)]
-pub struct VirtualMethods__bindgen_vtable(::std::os::raw::c_void);
+pub struct VirtualMethods__bindgen_vtable {
+    _offset_to_top_0: isize,
+    _rtti: *const ::std::os::raw::c_void,
+    foo: ::std::option::Option<
+        unsafe extern "C" fn(this: *mut ::std::os::raw::c_void),
+    >,
+}
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct VirtualMethods {
@@ -31,6 +37,10 @@ impl Default for VirtualMethods {
     fn default() -> Self {
         unsafe { ::std::mem::zeroed() }
     }
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN14VirtualMethods3fooEv"]
+    fn VirtualMethods_foo(this: *mut ::std::os::raw::c_void);
 }
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone)]

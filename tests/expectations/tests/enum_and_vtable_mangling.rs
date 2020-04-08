@@ -16,7 +16,13 @@ pub enum _bindgen_ty_1 {
     whatever_else = 1,
 }
 #[repr(C)]
-pub struct C__bindgen_vtable(::std::os::raw::c_void);
+pub struct C__bindgen_vtable {
+    _offset_to_top_0: isize,
+    _rtti: *const ::std::os::raw::c_void,
+    match_: ::std::option::Option<
+        unsafe extern "C" fn(this: *mut ::std::os::raw::c_void),
+    >,
+}
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct C {

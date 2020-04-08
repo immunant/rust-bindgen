@@ -625,6 +625,12 @@ fn bindgen_test_layout_RealAbstractionWithTonsOfMethods() {
     );
 }
 extern "C" {
+    #[link_name = "\u{1}_ZN32RealAbstractionWithTonsOfMethods3fooEv"]
+    fn RealAbstractionWithTonsOfMethods_foo(
+        this: *mut RealAbstractionWithTonsOfMethods,
+    );
+}
+extern "C" {
     #[link_name = "\u{1}_ZNK32RealAbstractionWithTonsOfMethods3barEv"]
     pub fn RealAbstractionWithTonsOfMethods_bar(
         this: *const RealAbstractionWithTonsOfMethods,
@@ -648,6 +654,10 @@ extern "C" {
     pub fn RealAbstractionWithTonsOfMethods_sta();
 }
 impl RealAbstractionWithTonsOfMethods {
+    #[inline]
+    pub unsafe fn foo(&mut self) {
+        RealAbstractionWithTonsOfMethods_foo(self)
+    }
     #[inline]
     pub unsafe fn bar(&self) {
         RealAbstractionWithTonsOfMethods_bar(self)

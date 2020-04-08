@@ -19,8 +19,8 @@ use ir::analysis::{HasVtable, Sizedness};
 use ir::annotations::FieldAccessorKind;
 use ir::comment;
 use ir::comp::{
-    Base, BaseKind, Bitfield, BitfieldUnit, CompInfo, CompKind, Field,
-    FieldData, FieldMethods, Method, MethodKind,
+    BaseKind, Bitfield, BitfieldUnit, CompInfo, CompKind, Field,
+    FieldData, FieldMethods, Method, MethodKind, VTableEntry,
 };
 use ir::context::{BindgenContext, ItemId, TypeId};
 use ir::derive::{
@@ -891,22 +891,17 @@ impl CodeGenerator for Type {
 
 struct Vtable<'a> {
     item_id: ItemId,
-    #[allow(dead_code)]
-    methods: &'a [Method],
-    #[allow(dead_code)]
-    base_classes: &'a [Base],
+    entries: &'a [VTableEntry],
 }
 
 impl<'a> Vtable<'a> {
     fn new(
         item_id: ItemId,
-        methods: &'a [Method],
-        base_classes: &'a [Base],
+        entries: &'a [VTableEntry],
     ) -> Self {
         Vtable {
-            item_id: item_id,
-            methods: methods,
-            base_classes: base_classes,
+            item_id,
+            entries,
         }
     }
 }
@@ -933,10 +928,67 @@ impl<'a> CodeGenerator for Vtable<'a> {
         // For now, generate an empty struct, later we should generate function
         // pointers and whatnot.
         let name = ctx.rust_ident(&canonical_name);
-        let void = helpers::ast_ty::c_void(ctx);
+        let mut vcall_offset_count = 0;
+        let mut vbase_offset_count = 0;
+        let mut offset_to_top_count = 0;
+        let fields = self.entries.iter().map(|entry| {
+            match entry {
+                VTableEntry::VCallOffset(_) => {
+                    let field_name = format!("_vcall_offset_{}", vcall_offset_count);
+                    vcall_offset_count += 1;
+                    let field_name = ctx.rust_ident_raw(field_name);
+                    quote! { #field_name: isize, }
+                }
+                VTableEntry::VBaseOffset(_) => {
+                    let field_name = format!("_vbase_offset_{}", vbase_offset_count);
+                    vbase_offset_count += 1;
+                    let field_name = ctx.rust_ident_raw(field_name);
+                    quote! { #field_name: isize, }
+                }
+                VTableEntry::OffsetToTop(_) => {
+                    let field_name = format!("_offset_to_top_{}", offset_to_top_count);
+                    offset_to_top_count += 1;
+                    let field_name = ctx.rust_ident_raw(field_name);
+                    quote! { #field_name: isize, }
+                }
+                VTableEntry::RTTI => {
+                    let ty = helpers::ast_ty::c_void(ctx).to_ptr(true);
+                    quote! { _rtti: #ty, }
+                }
+                VTableEntry::FunctionPointer(id) => {
+                    let function = ctx.resolve_item(id).expect_function();
+                    let field_name = ctx.rust_ident_raw(ctx.rust_mangle(function.name()));
+                    let field_ty = function.signature().to_rust_ty_or_opaque(ctx, &());
+                    // ty.append_implicit_template_params(ctx, field_item);
+                    quote! { #field_name: #field_ty, }
+                }
+                VTableEntry::CompleteDtorPointer(id) => {
+                    let function = ctx.resolve_item(id).expect_function();
+                    let field_ty = function.signature().to_rust_ty_or_opaque(ctx, &());
+                    // ty.append_implicit_template_params(ctx, field_item);
+                    quote! { _complete_destructor: #field_ty, }
+                }
+                VTableEntry::DeletingDtorPointer(id) => {
+                    let function = ctx.resolve_item(id).expect_function();
+                    let field_ty = function.signature().to_rust_ty_or_opaque(ctx, &());
+                    // ty.append_implicit_template_params(ctx, field_item);
+                    quote! { _deleting_destructor: #field_ty, }
+                }
+                VTableEntry::UnusedFunctionPointer(id) => {
+                    let function = ctx.resolve_item(id).expect_function();
+                    let field_name = format!("_{}", ctx.rust_mangle(function.name()));
+                    let field_name = ctx.rust_ident_raw(field_name);
+                    let field_ty = function.signature().to_rust_ty_or_opaque(ctx, &());
+                    // ty.append_implicit_template_params(ctx, field_item);
+                    quote! { #field_name: #field_ty, }
+                }
+            }
+        }).collect::<proc_macro2::TokenStream>();
         result.push(quote! {
             #[repr(C)]
-            pub struct #name ( #void );
+            pub struct #name {
+                #fields
+            }
         });
     }
 }
@@ -1578,7 +1630,7 @@ impl CompInfo {
             // We don't have a primary base class but still need a vtable
             // pointer.
             let vtable =
-                Vtable::new(item.id(), self.methods(), self.base_members());
+                Vtable::new(item.id(), self.vtable_entries());
             vtable.codegen(ctx, result, item);
 
             let vtable_type = vtable
@@ -3782,12 +3834,20 @@ impl CodeGenerator for Function {
                 quote! { #[link(wasm_import_module = #name)] }
             });
 
+        let vis = if self.is_private() {
+            quote! {}
+        } else {
+            quote! {
+                pub
+            }
+        };
+
         let ident = ctx.rust_ident(canonical_name);
         let tokens = quote! {
             #wasm_link_attribute
             extern #abi {
                 #(#attributes)*
-                pub fn #ident ( #( #args ),* ) #ret;
+                #vis fn #ident ( #( #args ),* ) #ret;
             }
         };
         result.push(tokens);

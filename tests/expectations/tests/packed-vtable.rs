@@ -9,7 +9,14 @@
 #![cfg(feature = "nightly")]
 
 #[repr(C)]
-pub struct PackedVtable__bindgen_vtable(::std::os::raw::c_void);
+pub struct PackedVtable__bindgen_vtable {
+    _offset_to_top_0: isize,
+    _rtti: *const ::std::os::raw::c_void,
+    _complete_destructor:
+        ::std::option::Option<unsafe extern "C" fn(this: *mut PackedVtable)>,
+    _deleting_destructor:
+        ::std::option::Option<unsafe extern "C" fn(this: *mut PackedVtable)>,
+}
 #[repr(C, packed)]
 #[derive(Debug)]
 pub struct PackedVtable {

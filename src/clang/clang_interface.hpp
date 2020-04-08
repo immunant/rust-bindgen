@@ -22,6 +22,8 @@ struct ASTContext;
 struct SourceRange;
 struct Attr;
 struct PreprocessedEntity;
+struct VTableLayout;
+struct VTableComponent;
 
 namespace comments {
 struct Comment;
@@ -33,6 +35,30 @@ struct FullComment;
 using namespace clang;
 
 extern "C" {
+
+enum VTableComponentKind {
+  CK_VCallOffset,
+  CK_VBaseOffset,
+  CK_OffsetToTop,
+  CK_RTTI,
+  CK_FunctionPointer,
+
+  /// A pointer to the complete destructor.
+  CK_CompleteDtorPointer,
+
+  /// A pointer to the deleting destructor.
+  CK_DeletingDtorPointer,
+
+  /// An entry that is never used.
+  ///
+  /// In some cases, a vtable function pointer will end up never being
+  /// called. Such vtable function pointers are represented as a
+  /// CK_UnusedFunctionPointer.
+  CK_UnusedFunctionPointer,
+
+  /// Error value indicating that this component's kind could not be retreived.
+  CK_Invalid,
+};
 
 struct EvalResult;
 
@@ -261,6 +287,12 @@ BindgenStringRef CXXBaseSpecifier_getSpelling(const CXXBaseSpecifier *);
 SourceLocation *CXXBaseSpecifier_getLocation(const CXXBaseSpecifier *);
 int64_t CXXRecordDecl_baseClassOffset(const Decl *, const CXXBaseSpecifier *, ASTContext *);
 const Decl *CXXRecordDecl_getPrimaryBase(const Decl *, ASTContext *);
+const VTableLayout *CXXRecordDecl_getVTableLayout(const Decl *, ASTContext *);
+unsigned VTableLayout_componentCount(const VTableLayout *);
+const VTableComponent *VTableLayout_getComponent(const VTableLayout *, unsigned);
+enum VTableComponentKind VTableComponent_getKind(const VTableComponent *);
+int64_t VTableComponent_getOffset(const VTableComponent *);
+const Decl *VTableComponent_getDecl(const VTableComponent *);
 
 SourceLocation *Attr_getLocation(const Attr *);
 SourceLocation *PreprocessedEntity_getLocation(const PreprocessedEntity *);

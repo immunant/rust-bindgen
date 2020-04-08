@@ -15,6 +15,7 @@ use ir::derive::CanDeriveCopy;
 use parse::{ClangItemParser, ParseError};
 use peeking_take_while::PeekableExt;
 use std::cmp;
+use std::convert::TryInto;
 use std::io;
 use std::mem;
 use HashMap;
@@ -986,6 +987,18 @@ impl Base {
     }
 }
 
+#[derive(Clone, Debug)]
+pub enum VTableEntry {
+    VCallOffset(isize),
+    VBaseOffset(isize),
+    OffsetToTop(isize),
+    RTTI,
+    FunctionPointer(FunctionId),
+    CompleteDtorPointer(FunctionId),
+    DeletingDtorPointer(FunctionId),
+    UnusedFunctionPointer(FunctionId),
+}
+
 /// A compound type.
 ///
 /// Either a struct or union, a compound type is built up from the combination
@@ -1040,6 +1053,8 @@ pub struct CompInfo {
     /// Set of static constants declared inside this class.
     inner_vars: Vec<VarId>,
 
+    vtable: Vec<VTableEntry>,
+
     /// Whether this type should generate an vtable (TODO: Should be able to
     /// look at the virtual methods and ditch this field).
     has_own_virtual_method: bool,
@@ -1091,6 +1106,7 @@ impl CompInfo {
             virtual_bases: vec![],
             inner_types: vec![],
             inner_vars: vec![],
+            vtable: vec![],
             has_own_virtual_method: false,
             has_destructor: false,
             has_nonempty_base: false,
@@ -1245,6 +1261,10 @@ impl CompInfo {
         &self.virtual_bases
     }
 
+    pub fn vtable_entries(&self) -> &[VTableEntry] {
+        &self.vtable
+    }
+
     /// Construct a new compound type from a Clang type.
     pub fn from_ty(
         potential_id: ItemId,
@@ -1287,6 +1307,39 @@ impl CompInfo {
                 ctx,
             );
             ci.primary_base = Some(base_type);
+        }
+
+        if let Some(components) = cursor.get_vtable_components() {
+            ci.vtable = components.map(|component| {
+                match component {
+                    VTableComponent::VCallOffset(offset) =>
+                        VTableEntry::VCallOffset(offset.try_into().unwrap()),
+                    VTableComponent::VBaseOffset(offset) =>
+                        VTableEntry::VBaseOffset(offset.try_into().unwrap()),
+                    VTableComponent::OffsetToTop(offset) =>
+                        VTableEntry::OffsetToTop(offset.try_into().unwrap()),
+                    VTableComponent::RTTI(_) => VTableEntry::RTTI,
+                    VTableComponent::FunctionPointer(cur) |
+                    VTableComponent::CompleteDtorPointer(cur) |
+                    VTableComponent::DeletingDtorPointer(cur) |
+                    VTableComponent::UnusedFunctionPointer(cur) => {
+                        let item = Item::parse(cur, Some(potential_id), ctx)
+                            .expect("Could not resolve vtable function pointer");
+                        let id = item.expect_function_id(ctx);
+                        match component {
+                            VTableComponent::FunctionPointer(_) =>
+                                VTableEntry::FunctionPointer(id),
+                            VTableComponent::CompleteDtorPointer(_) =>
+                                VTableEntry::CompleteDtorPointer(id),
+                            VTableComponent::DeletingDtorPointer(_) =>
+                                VTableEntry::DeletingDtorPointer(id),
+                            VTableComponent::UnusedFunctionPointer(_) =>
+                                VTableEntry::UnusedFunctionPointer(id),
+                            _ => unreachable!("Other arms handled in outer match"),
+                        }
+                    }
+                }
+            }).collect();
         }
 
         let mut maybe_anonymous_struct_field = None;
@@ -1548,8 +1601,8 @@ impl CompInfo {
                     }
 
                     if let Ok(item) = Item::parse(cur, Some(potential_id), ctx)
-                    {
-                        ci.inner_vars.push(item.as_var_id_unchecked());
+                    { 
+                       ci.inner_vars.push(item.as_var_id_unchecked());
                     }
                 }
                 // Intentionally not handled

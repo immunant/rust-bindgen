@@ -8,7 +8,7 @@
 )]
 
 #[repr(C)]
-pub struct BaseWithVtable__bindgen_vtable(::std::os::raw::c_void);
+pub struct BaseWithVtable__bindgen_vtable {}
 /// This should have an explicit vtable.
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -46,6 +46,10 @@ impl Default for DerivedWithNoVirtualMethods {
         unsafe { ::std::mem::zeroed() }
     }
 }
+extern "C" {
+    #[link_name = "\u{1}_ZN14BaseWithVtableIPcE5helloEv"]
+    fn DerivedWithNoVirtualMethods_hello(this: *mut ::std::os::raw::c_void);
+}
 /// This should not have an explicit vtable.
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -70,6 +74,10 @@ impl Default for DerivedWithVirtualMethods {
         unsafe { ::std::mem::zeroed() }
     }
 }
+extern "C" {
+    #[link_name = "\u{1}_ZN25DerivedWithVirtualMethods8zoidbergEv"]
+    fn DerivedWithVirtualMethods_zoidberg(this: *mut ::std::os::raw::c_void);
+}
 /// This should not have any vtable.
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -83,7 +91,13 @@ impl<U> Default for BaseWithoutVtable<U> {
     }
 }
 #[repr(C)]
-pub struct DerivedWithVtable__bindgen_vtable(::std::os::raw::c_void);
+pub struct DerivedWithVtable__bindgen_vtable {
+    _offset_to_top_0: isize,
+    _rtti: *const ::std::os::raw::c_void,
+    leela: ::std::option::Option<
+        unsafe extern "C" fn(this: *mut ::std::os::raw::c_void),
+    >,
+}
 /// This should have an explicit vtable.
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -108,6 +122,10 @@ impl Default for DerivedWithVtable {
     fn default() -> Self {
         unsafe { ::std::mem::zeroed() }
     }
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN17DerivedWithVtable5leelaEv"]
+    fn DerivedWithVtable_leela(this: *mut ::std::os::raw::c_void);
 }
 /// This should not have any vtable.
 #[repr(C)]

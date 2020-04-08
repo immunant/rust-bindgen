@@ -1025,6 +1025,25 @@ impl Cursor {
         None
     }
 
+    pub fn get_vtable_components(&self) -> Option<VTableComponentIterator> {
+        match self.node {
+            ASTNode::Decl(d) => unsafe {
+                let layout = clang_interface::CXXRecordDecl_getVTableLayout(d, self.context());
+                if !layout.is_null() {
+                    let length = clang_interface::VTableLayout_componentCount(layout);
+                    return Some(VTableComponentIterator {
+                        layout,
+                        unit: self.unit,
+                        length,
+                        index: 0,
+                    });
+                }
+            },
+            _ => {}
+        }
+        None
+    }
+
     /// Is this cursor's referent a dynamic class (i.e. has a virtual pointer)?
     pub fn is_dynamic_class(&self) -> bool {
         match self.node {
@@ -1777,6 +1796,86 @@ impl ExactSizeIterator for TypeTemplateArgIterator {
         (self.length - self.index) as usize
     }
 }
+
+pub enum VTableComponent {
+    VCallOffset(i64),
+    VBaseOffset(i64),
+    OffsetToTop(i64),
+    RTTI(Cursor),
+    FunctionPointer(Cursor),
+    CompleteDtorPointer(Cursor),
+    DeletingDtorPointer(Cursor),
+    UnusedFunctionPointer(Cursor),
+}
+
+impl VTableComponent {
+    fn new(
+        component: *const clang_interface::clang_VTableComponent,
+        unit: *mut clang_interface::clang_ASTUnit,
+    ) -> Self {
+        assert!(!component.is_null());
+        use self::clang_interface::VTableComponentKind;
+        let kind = unsafe { clang_interface::VTableComponent_getKind(component) };
+        match kind {
+            VTableComponentKind::CK_VCallOffset => {
+                let offset = unsafe { clang_interface::VTableComponent_getOffset(component) };
+                VTableComponent::VCallOffset(offset)
+            }
+            VTableComponentKind::CK_VBaseOffset => {
+                let offset = unsafe { clang_interface::VTableComponent_getOffset(component) };
+                VTableComponent::VBaseOffset(offset)
+            }
+            VTableComponentKind::CK_OffsetToTop => {
+                let offset = unsafe { clang_interface::VTableComponent_getOffset(component) };
+                VTableComponent::OffsetToTop(offset)
+            }
+            VTableComponentKind::CK_RTTI => {
+                let decl = unsafe { clang_interface::VTableComponent_getDecl(component) };
+                VTableComponent::RTTI(Cursor::new(ASTNode::Decl(decl), unit))
+            }
+            VTableComponentKind::CK_FunctionPointer => {
+                let decl = unsafe { clang_interface::VTableComponent_getDecl(component) };
+                VTableComponent::FunctionPointer(Cursor::new(ASTNode::Decl(decl), unit))
+            }
+            VTableComponentKind::CK_CompleteDtorPointer => {
+                let decl = unsafe { clang_interface::VTableComponent_getDecl(component) };
+                VTableComponent::CompleteDtorPointer(Cursor::new(ASTNode::Decl(decl), unit))
+            }
+            VTableComponentKind::CK_DeletingDtorPointer => {
+                let decl = unsafe { clang_interface::VTableComponent_getDecl(component) };
+                VTableComponent::DeletingDtorPointer(Cursor::new(ASTNode::Decl(decl), unit))
+            }
+            VTableComponentKind::CK_UnusedFunctionPointer => {
+                let decl = unsafe { clang_interface::VTableComponent_getDecl(component) };
+                VTableComponent::UnusedFunctionPointer(Cursor::new(ASTNode::Decl(decl), unit))
+            }
+            _ => unreachable!("Invalid VTableComponent Kind: {}", kind),
+        }
+    }
+}
+
+pub struct VTableComponentIterator {
+    layout: *const clang_interface::clang_VTableLayout,
+    unit: *mut clang_interface::clang_ASTUnit,
+    length: u32,
+    index: u32,
+}
+
+impl Iterator for VTableComponentIterator {
+    type Item = VTableComponent;
+    fn next(&mut self) -> Option<VTableComponent> {
+        if self.index < self.length {
+            let component = unsafe {
+                clang_interface::VTableLayout_getComponent(self.layout, self.index)
+            };
+            self.index += 1;
+            Some(VTableComponent::new(component, self.unit))
+        } else {
+            None
+        }
+    }
+}
+        
 
 /// A `SourceLocation` is a file, line, column, and byte offset location for
 /// some source text.

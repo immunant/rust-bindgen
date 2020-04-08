@@ -1,3 +1,4 @@
+#include <limits>
 #include <string>
 
 #include "clang/AST/Comment.h"
@@ -10,6 +11,7 @@
 #include "clang/AST/ExprObjC.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/AST/RecordLayout.h"
+#include "clang/AST/VTableBuilder.h"
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Basic/Version.h"
@@ -1741,6 +1743,77 @@ const Decl *CXXRecordDecl_getPrimaryBase(const Decl *D, ASTContext *Context) {
     return nullptr;
   const ASTRecordLayout &Layout = Context->getASTRecordLayout(RD);
   return Layout.getPrimaryBase();
+}
+
+const VTableLayout *CXXRecordDecl_getVTableLayout(const Decl *D, ASTContext *Context) {
+  auto *RD = GetCXXRecordDeclForLayout(D, Context);
+  if (!RD)
+    return nullptr;
+  auto *VTContext = dyn_cast<ItaniumVTableContext>(Context->getVTableContext());
+
+  // We don't know how to handle microsoft vtables yet.
+  if (!VTContext)
+    return nullptr;
+
+  return &VTContext->getVTableLayout(RD);
+}
+
+unsigned VTableLayout_componentCount(const VTableLayout *Layout) {
+  if (!Layout)
+    return 0;
+
+  return Layout->vtable_components().size();
+}
+
+const VTableComponent *VTableLayout_getComponent(const VTableLayout *Layout, unsigned Index) {
+  if (!Layout || Index >= Layout->vtable_components().size())
+    return nullptr;
+
+  return &Layout->vtable_components()[Index];
+}
+
+enum VTableComponentKind VTableComponent_getKind(const VTableComponent *C) {
+  assert(C && "Null VTableComponent");
+  switch (C->getKind()) {
+  case VTableComponent::CK_VCallOffset:           return CK_VCallOffset;
+  case VTableComponent::CK_VBaseOffset:           return CK_VBaseOffset;
+  case VTableComponent::CK_OffsetToTop:           return CK_OffsetToTop;
+  case VTableComponent::CK_RTTI:                  return CK_RTTI;
+  case VTableComponent::CK_FunctionPointer:       return CK_FunctionPointer;
+  case VTableComponent::CK_CompleteDtorPointer:   return CK_CompleteDtorPointer;
+  case VTableComponent::CK_DeletingDtorPointer:   return CK_DeletingDtorPointer;
+  case VTableComponent::CK_UnusedFunctionPointer: return CK_UnusedFunctionPointer;
+  }
+  return CK_Invalid;
+}
+
+int64_t VTableComponent_getOffset(const VTableComponent *C) {
+  assert(C && "Null VTableComponent");
+  switch (C->getKind()) {
+  case VTableComponent::CK_VCallOffset: return C->getVCallOffset().getQuantity();
+  case VTableComponent::CK_VBaseOffset: return C->getVBaseOffset().getQuantity();
+  case VTableComponent::CK_OffsetToTop: return C->getOffsetToTop().getQuantity();
+  default:                              return std::numeric_limits<int64_t>::min();
+  }
+}
+
+const Decl *VTableComponent_getDecl(const VTableComponent *C) {
+  if (!C)
+    return nullptr;
+
+  switch (C->getKind()) {
+  case VTableComponent::CK_FunctionPointer:
+  case VTableComponent::CK_CompleteDtorPointer:
+  case VTableComponent::CK_DeletingDtorPointer:
+  case VTableComponent::CK_UnusedFunctionPointer:
+    return C->getGlobalDecl().getDecl();
+
+  case VTableComponent::CK_RTTI:
+    return C->getRTTIDecl();
+
+  default:
+    return nullptr;
+  }
 }
 
 SourceLocation *Attr_getLocation(const Attr *A) {

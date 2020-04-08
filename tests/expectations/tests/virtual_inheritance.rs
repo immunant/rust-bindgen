@@ -31,7 +31,11 @@ fn bindgen_test_layout_A() {
     );
 }
 #[repr(C)]
-pub struct B__bindgen_vtable(::std::os::raw::c_void);
+pub struct B__bindgen_vtable {
+    _vbase_offset_0: isize,
+    _offset_to_top_0: isize,
+    _rtti: *const ::std::os::raw::c_void,
+}
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct B {
@@ -63,7 +67,11 @@ impl Default for B {
     }
 }
 #[repr(C)]
-pub struct C__bindgen_vtable(::std::os::raw::c_void);
+pub struct C__bindgen_vtable {
+    _vbase_offset_0: isize,
+    _offset_to_top_0: isize,
+    _rtti: *const ::std::os::raw::c_void,
+}
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct C {

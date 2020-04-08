@@ -26,9 +26,13 @@ fn bindgen_test_layout_TestOverload() {
     );
 }
 extern "C" {
+    #[link_name = "\u{1}_ZN12TestOverloadC1Ev"]
+    fn TestOverload_TestOverload(this: *mut TestOverload);
+}
+extern "C" {
     /// Calling this should use `mem::unintialized()` and not `MaybeUninit()` as only rust 1.36 includes that.
     #[link_name = "\u{1}_ZN12TestOverloadC1Ei"]
-    pub fn TestOverload_TestOverload(
+    pub fn TestOverload_TestOverload1(
         this: *mut TestOverload,
         arg1: ::std::os::raw::c_int,
     );
@@ -36,19 +40,25 @@ extern "C" {
 extern "C" {
     /// Calling this should use `mem::unintialized()` and not `MaybeUninit()` as only rust 1.36 includes that.
     #[link_name = "\u{1}_ZN12TestOverloadC1Ed"]
-    pub fn TestOverload_TestOverload1(this: *mut TestOverload, arg1: f64);
+    pub fn TestOverload_TestOverload2(this: *mut TestOverload, arg1: f64);
 }
 impl TestOverload {
     #[inline]
-    pub unsafe fn new(arg1: ::std::os::raw::c_int) -> Self {
+    pub unsafe fn new() -> Self {
         let mut __bindgen_tmp = ::std::mem::uninitialized();
-        TestOverload_TestOverload(&mut __bindgen_tmp, arg1);
+        TestOverload_TestOverload(&mut __bindgen_tmp);
         __bindgen_tmp
     }
     #[inline]
-    pub unsafe fn new1(arg1: f64) -> Self {
+    pub unsafe fn new1(arg1: ::std::os::raw::c_int) -> Self {
         let mut __bindgen_tmp = ::std::mem::uninitialized();
         TestOverload_TestOverload1(&mut __bindgen_tmp, arg1);
+        __bindgen_tmp
+    }
+    #[inline]
+    pub unsafe fn new2(arg1: f64) -> Self {
+        let mut __bindgen_tmp = ::std::mem::uninitialized();
+        TestOverload_TestOverload2(&mut __bindgen_tmp, arg1);
         __bindgen_tmp
     }
 }

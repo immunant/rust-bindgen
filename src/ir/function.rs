@@ -89,6 +89,9 @@ pub struct Function {
 
     /// The linkage of the function.
     linkage: Linkage,
+
+    /// Is this a private method?
+    private: bool,
 }
 
 impl Function {
@@ -100,6 +103,7 @@ impl Function {
         comment: Option<String>,
         kind: FunctionKind,
         linkage: Linkage,
+        private: bool,
     ) -> Self {
         Function {
             name,
@@ -108,6 +112,7 @@ impl Function {
             comment,
             kind,
             linkage,
+            private,
         }
     }
 
@@ -134,6 +139,11 @@ impl Function {
     /// Get this function's linkage.
     pub fn linkage(&self) -> Linkage {
         self.linkage
+    }
+
+    /// Is this a private method?
+    pub fn is_private(&self) -> bool {
+        self.private
     }
 }
 
@@ -566,9 +576,7 @@ impl ClangSubItemParser for Function {
             return Err(ParseError::Continue);
         }
 
-        if cursor.access_specifier() == CX_CXXPrivate {
-            return Err(ParseError::Continue);
-        }
+        let private = cursor.access_specifier() == CX_CXXPrivate;
 
         if !context.options().generate_inline_functions &&
             cursor.is_inlined_function()
@@ -607,7 +615,7 @@ impl ClangSubItemParser for Function {
         let comment = cursor.raw_comment();
 
         let function =
-            Self::new(name, mangled_name, sig, comment, kind, linkage);
+            Self::new(name, mangled_name, sig, comment, kind, linkage, private);
         Ok(ParseResult::New(function, Some(cursor)))
     }
 }

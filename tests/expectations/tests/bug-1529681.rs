@@ -25,3 +25,19 @@ fn bindgen_test_layout_BrowsingContext() {
         concat!("Alignment of ", stringify!(BrowsingContext))
     );
 }
+extern "C" {
+    #[link_name = "\u{1}_ZNK15BrowsingContext3TieEPv"]
+    fn BrowsingContext_Tie(
+        this: *const BrowsingContext,
+        aUnused: *mut ::std::os::raw::c_void,
+    ) -> [u8; 0usize];
+}
+impl BrowsingContext {
+    #[inline]
+    pub unsafe fn Tie(
+        &self,
+        aUnused: *mut ::std::os::raw::c_void,
+    ) -> [u8; 0usize] {
+        BrowsingContext_Tie(self, aUnused)
+    }
+}

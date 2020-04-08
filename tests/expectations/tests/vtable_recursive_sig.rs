@@ -8,7 +8,13 @@
 )]
 
 #[repr(C)]
-pub struct Base__bindgen_vtable(::std::os::raw::c_void);
+pub struct Base__bindgen_vtable {
+    _offset_to_top_0: isize,
+    _rtti: *const ::std::os::raw::c_void,
+    AsDerived: ::std::option::Option<
+        unsafe extern "C" fn(this: *mut ::std::os::raw::c_void) -> *mut Derived,
+    >,
+}
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct Base {
@@ -58,4 +64,8 @@ impl Default for Derived {
     fn default() -> Self {
         unsafe { ::std::mem::zeroed() }
     }
+}
+extern "C" {
+    #[link_name = "\u{1}_ZN7Derived9AsDerivedEv"]
+    fn Derived_AsDerived(this: *mut ::std::os::raw::c_void) -> *mut Derived;
 }
