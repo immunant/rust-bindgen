@@ -890,18 +890,18 @@ impl CodeGenerator for Type {
 }
 
 struct Vtable<'a> {
+    comp_info: &'a CompInfo,
     item_id: ItemId,
-    entries: &'a [VTableEntry],
 }
 
 impl<'a> Vtable<'a> {
     fn new(
+        comp_info: &'a CompInfo,
         item_id: ItemId,
-        entries: &'a [VTableEntry],
     ) -> Self {
         Vtable {
+            comp_info,
             item_id,
-            entries,
         }
     }
 }
@@ -915,7 +915,6 @@ impl<'a> CodeGenerator for Vtable<'a> {
         result: &mut CodegenResult<'b>,
         item: &Item,
     ) {
-        assert_eq!(item.id(), self.item_id);
         debug_assert!(item.is_enabled_for_codegen(ctx));
 
         let canonical_name = self.canonical_name(ctx);
@@ -925,13 +924,21 @@ impl<'a> CodeGenerator for Vtable<'a> {
         }
         result.saw_vtable(&canonical_name);
 
+        let vtable = match self.comp_info.vtable() {
+            Some(vtable) => vtable,
+            None => return,
+        };
+
         // For now, generate an empty struct, later we should generate function
         // pointers and whatnot.
+        let vfn_ty = self
+            .try_to_rust_ty(ctx, &())
+            .expect("vtable to Rust type conversion is infallible");
         let name = ctx.rust_ident(&canonical_name);
         let mut vcall_offset_count = 0;
         let mut vbase_offset_count = 0;
         let mut offset_to_top_count = 0;
-        let fields = self.entries.iter().map(|entry| {
+        let primary_vtable = vtable.primary_entries().iter().map(|entry| {
             match entry {
                 VTableEntry::VCallOffset(_) => {
                     let field_name = format!("_vcall_offset_{}", vcall_offset_count);
@@ -953,8 +960,42 @@ impl<'a> CodeGenerator for Vtable<'a> {
                 }
                 VTableEntry::RTTI => {
                     let ty = helpers::ast_ty::c_void(ctx).to_ptr(true);
-                    quote! { _rtti: #ty, }
+                    // Note: The address point (beginning of virtual function
+                    // pointers) always follows the typeinfo pointer (RTTI),
+                    // which itself must always be present. Therefore we can
+                    // just emit the vfn field immediately after _rtti.
+                    quote! {
+                        _rtti: #ty,
+                        vfns: #vfn_ty,
+                    }
                 }
+                _ => quote! {},
+            }
+        }).collect::<proc_macro2::TokenStream>();
+
+        let secondary_vtables = vtable
+            .secondary_vtables()
+            .iter()
+            .map(|(_, ty)| {
+                let class = ty.into_resolver().through_type_refs().resolve(ctx);
+                let name = ctx.rust_ident(
+                    format!("_base_{}", class.canonical_name(ctx))
+                );
+                let ty = ctx.rust_ident(
+                    format!("{}__bindgen_vtable", class.canonical_name(ctx))
+                );
+                quote! { #name: #ty, }
+            }).collect::<proc_macro2::TokenStream>();
+        result.push(quote! {
+            #[repr(C)]
+            pub struct #name {
+                #primary_vtable
+                #secondary_vtables
+            }
+        });
+
+        let vfns = vtable.primary_entries().iter().map(|entry| {
+            match entry {
                 VTableEntry::FunctionPointer(id) => {
                     let function = ctx.resolve_item(id).expect_function();
                     let field_name = ctx.rust_ident_raw(ctx.rust_mangle(function.name()));
@@ -982,12 +1023,13 @@ impl<'a> CodeGenerator for Vtable<'a> {
                     // ty.append_implicit_template_params(ctx, field_item);
                     quote! { #field_name: #field_ty, }
                 }
+                _ => quote! {}
             }
         }).collect::<proc_macro2::TokenStream>();
         result.push(quote! {
             #[repr(C)]
-            pub struct #name {
-                #fields
+            pub struct #vfn_ty {
+                #vfns
             }
         });
     }
@@ -1007,7 +1049,8 @@ impl<'a> TryToRustTy for Vtable<'a> {
         ctx: &BindgenContext,
         _: &(),
     ) -> error::Result<proc_macro2::TokenStream> {
-        let name = ctx.rust_ident(self.canonical_name(ctx));
+        let name = format!("{}__bindgen_vfns", self.item_id.canonical_name(ctx));
+        let name = ctx.rust_ident(name);
         Ok(quote! {
             #name
         })
@@ -1618,6 +1661,7 @@ impl CompInfo {
         ctx: &BindgenContext,
         result: &mut CodegenResult<'a>,
         item: &Item,
+        vtable_ty: Option<proc_macro2::TokenStream>,
         struct_layout: &mut StructLayoutTracker,
         fields: &mut F,
         methods: &mut M,
@@ -1626,26 +1670,25 @@ impl CompInfo {
         F: Extend<proc_macro2::TokenStream>,
         M: Extend<proc_macro2::TokenStream>,
     {
-        if self.is_dynamic_class() && self.primary_base().is_none() {
-            // We don't have a primary base class but still need a vtable
-            // pointer.
-            let vtable =
-                Vtable::new(item.id(), self.vtable_entries());
+        if self.is_dynamic_class() {
+            let vtable = Vtable::new(self, item.id());
             vtable.codegen(ctx, result, item);
 
-            let vtable_type = vtable
-                .try_to_rust_ty(ctx, &())
-                .expect("vtable to Rust type conversion is infallible")
-                .to_ptr(true);
+            if self.primary_base().is_none() {
+                // We don't have a primary base class but still need a vtable
+                // pointer.
+                let vtable_ty = vtable_ty.unwrap_or_else(|| {
+                    vtable.try_to_rust_ty(ctx, &()).unwrap()
+                });
+                let vtable_type = vtable_ty.to_ptr(true);
 
-            fields.extend(Some(quote! {
-                pub vtable_: #vtable_type ,
-            }));
+                fields.extend(Some(quote! {
+                    pub vtable_: #vtable_type ,
+                }));
 
-            struct_layout.saw_vtable();
+                struct_layout.saw_vtable();
+            }
         }
-
-        let has_virtual_bases = !self.virtual_bases().is_empty();
 
         let mut nonvirtual_bases = self.base_members()
             .into_iter()
@@ -1656,12 +1699,12 @@ impl CompInfo {
             return base1.offset.partial_cmp(&base2.offset).unwrap()
         });
 
+        let primary_base_id = self
+            .primary_base()
+            .map(|id| id.into_resolver().through_type_refs().resolve(ctx).id());
+
         for base in nonvirtual_bases {
-            // TODO: Do we want to always emit base class fields inline? I think
-            // we're going to need to since the vtable pointer type will differ
-            // once we emit proper vtable types. If so, remove the else side of
-            // this branch.
-            if has_virtual_bases {
+            if self.is_dynamic_class() {
                 let base_item = base.ty
                     .into_resolver()
                     .through_type_refs()
@@ -1671,10 +1714,23 @@ impl CompInfo {
                     .canonical_type(ctx)
                     .as_comp()
                     .expect("Base was not a composite type?");
+                let vtable_ty = if Some(base_item.id()) == primary_base_id {
+                    // We share a vtable pointer with our primary base, so we
+                    // should be sure to point to the correct vfn type when
+                    // generating the primary base fields.
+                    Some(
+                        Vtable::new(self, item.id())
+                            .try_to_rust_ty(ctx, &())
+                            .expect("vtable to Rust type conversion is infallible")
+                    )
+                } else {
+                    None
+                };
                 base_info.lay_out_fields(
                     ctx,
                     result,
                     base_item,
+                    vtable_ty,
                     struct_layout,
                     fields,
                     methods,
@@ -1763,6 +1819,7 @@ impl CompInfo {
                     ctx,
                     result,
                     base_item,
+                    None,
                     struct_layout,
                     fields,
                     methods,
@@ -1829,6 +1886,7 @@ impl CodeGenerator for CompInfo {
                 ctx,
                 result,
                 item,
+                None,
                 &mut struct_layout,
                 &mut fields,
                 &mut methods,

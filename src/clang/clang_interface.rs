@@ -7518,6 +7518,23 @@ extern "C" {
     ) -> ::std::os::raw::c_uint;
 }
 extern "C" {
+    pub fn VTableLayout_getNumVTables(
+        arg1: *const clang_VTableLayout,
+    ) -> size_t;
+}
+extern "C" {
+    pub fn VTableLayout_getVTableOffset(
+        arg1: *const clang_VTableLayout,
+        index: size_t,
+    ) -> size_t;
+}
+extern "C" {
+    pub fn VTableLayout_getVTableBase(
+        arg1: *const clang_VTableLayout,
+        index: size_t,
+    ) -> *const clang_Decl;
+}
+extern "C" {
     pub fn VTableLayout_getComponent(
         arg1: *const clang_VTableLayout,
         arg2: ::std::os::raw::c_uint,

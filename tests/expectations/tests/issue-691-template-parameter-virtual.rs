@@ -11,6 +11,10 @@
 pub struct VirtualMethods__bindgen_vtable {
     _offset_to_top_0: isize,
     _rtti: *const ::std::os::raw::c_void,
+    vfns: VirtualMethods__bindgen_vfns,
+}
+#[repr(C)]
+pub struct VirtualMethods__bindgen_vfns {
     foo: ::std::option::Option<
         unsafe extern "C" fn(this: *mut ::std::os::raw::c_void),
     >,
@@ -18,7 +22,7 @@ pub struct VirtualMethods__bindgen_vtable {
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct VirtualMethods {
-    pub vtable_: *const VirtualMethods__bindgen_vtable,
+    pub vtable_: *const VirtualMethods__bindgen_vfns,
 }
 #[test]
 fn bindgen_test_layout_VirtualMethods() {

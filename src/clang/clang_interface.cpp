@@ -1745,6 +1745,17 @@ const Decl *CXXRecordDecl_getPrimaryBase(const Decl *D, ASTContext *Context) {
   return Layout.getPrimaryBase();
 }
 
+static void VTableLayout_dump(const VTableLayout *Layout) {
+  for (auto &AP : Layout->getAddressPoints()) {
+    llvm::errs() << AP.first.getBase()->getName() << ": ";
+    llvm::errs() << AP.second.VTableIndex << ", " << AP.second.AddressPointIndex << "\n";
+  }
+  for (size_t i = 0, e = Layout->getNumVTables(); i < e; ++i) {
+    llvm::errs() << Layout->getVTableOffset(i) << ", ";
+  }
+  llvm::errs() << "\n\n";
+}
+
 const VTableLayout *CXXRecordDecl_getVTableLayout(const Decl *D, ASTContext *Context) {
   auto *RD = GetCXXRecordDeclForLayout(D, Context);
   if (!RD)
@@ -1763,6 +1774,31 @@ unsigned VTableLayout_componentCount(const VTableLayout *Layout) {
     return 0;
 
   return Layout->vtable_components().size();
+}
+
+size_t VTableLayout_getNumVTables(const VTableLayout *Layout) {
+  if (!Layout)
+    return 0;
+  return Layout->getNumVTables();
+}
+
+size_t VTableLayout_getVTableOffset(const VTableLayout *Layout, size_t i) {
+  if (!Layout)
+    return 0;
+  return Layout->getVTableOffset(i);
+}
+
+const Decl *VTableLayout_getVTableBase(const VTableLayout *Layout, size_t index) {
+  if (!Layout)
+    return nullptr;
+
+  for (auto &AP : Layout->getAddressPoints()) {
+    if (AP.second.VTableIndex == index) {
+      return AP.first.getBase();
+    }
+  }
+
+  return nullptr;
 }
 
 const VTableComponent *VTableLayout_getComponent(const VTableLayout *Layout, unsigned Index) {

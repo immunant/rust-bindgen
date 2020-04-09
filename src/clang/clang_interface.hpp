@@ -289,6 +289,9 @@ int64_t CXXRecordDecl_baseClassOffset(const Decl *, const CXXBaseSpecifier *, AS
 const Decl *CXXRecordDecl_getPrimaryBase(const Decl *, ASTContext *);
 const VTableLayout *CXXRecordDecl_getVTableLayout(const Decl *, ASTContext *);
 unsigned VTableLayout_componentCount(const VTableLayout *);
+size_t VTableLayout_getNumVTables(const VTableLayout *);
+size_t VTableLayout_getVTableOffset(const VTableLayout *, size_t index);
+const Decl *VTableLayout_getVTableBase(const VTableLayout *, size_t index);
 const VTableComponent *VTableLayout_getComponent(const VTableLayout *, unsigned);
 enum VTableComponentKind VTableComponent_getKind(const VTableComponent *);
 int64_t VTableComponent_getOffset(const VTableComponent *);

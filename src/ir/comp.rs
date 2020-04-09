@@ -988,6 +988,36 @@ impl Base {
 }
 
 #[derive(Clone, Debug)]
+pub struct VTable {
+    entries: Vec<VTableEntry>,
+
+    // Class types of secondary vtables inside this vtable
+    secondary_vtables: Vec<(usize, TypeId)>,
+}
+
+impl VTable {
+    pub fn primary_size(&self) -> usize {
+        if self.secondary_vtables.is_empty() {
+            self.entries.len()
+        } else {
+            self.secondary_vtables[0].0
+        }
+    }
+
+    pub fn entries(&self) -> &[VTableEntry] {
+        &self.entries
+    }
+
+    pub fn primary_entries(&self) -> &[VTableEntry] {
+        &self.entries[..self.primary_size()]
+    }
+
+    pub fn secondary_vtables(&self) -> &[(usize, TypeId)] {
+        &self.secondary_vtables
+    }
+}
+
+#[derive(Clone, Debug)]
 pub enum VTableEntry {
     VCallOffset(isize),
     VBaseOffset(isize),
@@ -1053,7 +1083,7 @@ pub struct CompInfo {
     /// Set of static constants declared inside this class.
     inner_vars: Vec<VarId>,
 
-    vtable: Vec<VTableEntry>,
+    vtable: Option<VTable>,
 
     /// Whether this type should generate an vtable (TODO: Should be able to
     /// look at the virtual methods and ditch this field).
@@ -1106,7 +1136,7 @@ impl CompInfo {
             virtual_bases: vec![],
             inner_types: vec![],
             inner_vars: vec![],
-            vtable: vec![],
+            vtable: None,
             has_own_virtual_method: false,
             has_destructor: false,
             has_nonempty_base: false,
@@ -1261,8 +1291,8 @@ impl CompInfo {
         &self.virtual_bases
     }
 
-    pub fn vtable_entries(&self) -> &[VTableEntry] {
-        &self.vtable
+    pub fn vtable(&self) -> Option<&VTable> {
+        self.vtable.as_ref()
     }
 
     /// Construct a new compound type from a Clang type.
@@ -1310,7 +1340,7 @@ impl CompInfo {
         }
 
         if let Some(components) = cursor.get_vtable_components() {
-            ci.vtable = components.map(|component| {
+            let entries = components.map(|component| {
                 match component {
                     VTableComponent::VCallOffset(offset) =>
                         VTableEntry::VCallOffset(offset.try_into().unwrap()),
@@ -1340,6 +1370,21 @@ impl CompInfo {
                     }
                 }
             }).collect();
+
+            let mut secondary_vtables = cursor
+                .get_secondary_vtables();
+            secondary_vtables.sort_by_key(|(index, _)| *index);
+            let secondary_vtables = secondary_vtables
+                .into_iter()
+                .map(|(index, cur)| {
+                    (index, Item::from_ty_or_ref(cur.cur_type(), cur, None, ctx))
+                })
+                .collect();
+
+            ci.vtable = Some(VTable {
+                entries,
+                secondary_vtables,
+            });
         }
 
         let mut maybe_anonymous_struct_field = None;

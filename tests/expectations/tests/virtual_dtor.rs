@@ -11,6 +11,10 @@
 pub struct nsSlots__bindgen_vtable {
     _offset_to_top_0: isize,
     _rtti: *const ::std::os::raw::c_void,
+    vfns: nsSlots__bindgen_vfns,
+}
+#[repr(C)]
+pub struct nsSlots__bindgen_vfns {
     _complete_destructor:
         ::std::option::Option<unsafe extern "C" fn(this: *mut nsSlots)>,
     _deleting_destructor:
@@ -19,7 +23,7 @@ pub struct nsSlots__bindgen_vtable {
 #[repr(C)]
 #[derive(Debug)]
 pub struct nsSlots {
-    pub vtable_: *const nsSlots__bindgen_vtable,
+    pub vtable_: *const nsSlots__bindgen_vfns,
 }
 #[test]
 fn bindgen_test_layout_nsSlots() {

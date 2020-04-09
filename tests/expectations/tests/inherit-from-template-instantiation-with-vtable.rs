@@ -7,13 +7,11 @@
     non_upper_case_globals
 )]
 
-#[repr(C)]
-pub struct BaseWithVtable__bindgen_vtable {}
 /// This should have an explicit vtable.
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct BaseWithVtable<T> {
-    pub vtable_: *const BaseWithVtable__bindgen_vtable,
+    pub vtable_: *const BaseWithVtable__bindgen_vfns,
     pub t: T,
     pub _phantom_0: ::std::marker::PhantomData<::std::cell::UnsafeCell<T>>,
 }
@@ -22,11 +20,24 @@ impl<T> Default for BaseWithVtable<T> {
         unsafe { ::std::mem::zeroed() }
     }
 }
+#[repr(C)]
+pub struct DerivedWithNoVirtualMethods__bindgen_vtable {
+    _offset_to_top_0: isize,
+    _rtti: *const ::std::os::raw::c_void,
+    vfns: DerivedWithNoVirtualMethods__bindgen_vfns,
+}
+#[repr(C)]
+pub struct DerivedWithNoVirtualMethods__bindgen_vfns {
+    hello: ::std::option::Option<
+        unsafe extern "C" fn(this: *mut ::std::os::raw::c_void),
+    >,
+}
 /// This should not have an explicit vtable.
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct DerivedWithNoVirtualMethods {
-    pub _base: BaseWithVtable<*mut ::std::os::raw::c_char>,
+    pub vtable_: *const BaseWithVtable__bindgen_vfns,
+    pub t: *mut ::std::os::raw::c_char,
 }
 #[test]
 fn bindgen_test_layout_DerivedWithNoVirtualMethods() {
@@ -50,11 +61,27 @@ extern "C" {
     #[link_name = "\u{1}_ZN14BaseWithVtableIPcE5helloEv"]
     fn DerivedWithNoVirtualMethods_hello(this: *mut ::std::os::raw::c_void);
 }
+#[repr(C)]
+pub struct DerivedWithVirtualMethods__bindgen_vtable {
+    _offset_to_top_0: isize,
+    _rtti: *const ::std::os::raw::c_void,
+    vfns: DerivedWithVirtualMethods__bindgen_vfns,
+}
+#[repr(C)]
+pub struct DerivedWithVirtualMethods__bindgen_vfns {
+    hello: ::std::option::Option<
+        unsafe extern "C" fn(this: *mut ::std::os::raw::c_void),
+    >,
+    zoidberg: ::std::option::Option<
+        unsafe extern "C" fn(this: *mut ::std::os::raw::c_void),
+    >,
+}
 /// This should not have an explicit vtable.
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct DerivedWithVirtualMethods {
-    pub _base: BaseWithVtable<*mut ::std::os::raw::c_char>,
+    pub vtable_: *const BaseWithVtable__bindgen_vfns,
+    pub t: *mut ::std::os::raw::c_char,
 }
 #[test]
 fn bindgen_test_layout_DerivedWithVirtualMethods() {
@@ -94,6 +121,10 @@ impl<U> Default for BaseWithoutVtable<U> {
 pub struct DerivedWithVtable__bindgen_vtable {
     _offset_to_top_0: isize,
     _rtti: *const ::std::os::raw::c_void,
+    vfns: DerivedWithVtable__bindgen_vfns,
+}
+#[repr(C)]
+pub struct DerivedWithVtable__bindgen_vfns {
     leela: ::std::option::Option<
         unsafe extern "C" fn(this: *mut ::std::os::raw::c_void),
     >,
@@ -102,8 +133,8 @@ pub struct DerivedWithVtable__bindgen_vtable {
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct DerivedWithVtable {
-    pub vtable_: *const DerivedWithVtable__bindgen_vtable,
-    pub _base: BaseWithoutVtable<*mut ::std::os::raw::c_char>,
+    pub vtable_: *const DerivedWithVtable__bindgen_vfns,
+    pub u: *mut ::std::os::raw::c_char,
 }
 #[test]
 fn bindgen_test_layout_DerivedWithVtable() {

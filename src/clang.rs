@@ -1044,6 +1044,28 @@ impl Cursor {
         None
     }
 
+    pub fn get_secondary_vtables(&self) -> Vec<(usize, Cursor)> {
+        match self.node {
+            ASTNode::Decl(d) => unsafe {
+                let layout = clang_interface::CXXRecordDecl_getVTableLayout(d, self.context());
+                if !layout.is_null() {
+                    let mut secondary_vtables = vec![];
+                    let count = clang_interface::VTableLayout_getNumVTables(layout);
+                    for i in 1..count {
+                        let index = clang_interface::VTableLayout_getVTableOffset(layout, i);
+                        let base = self.with_node(ASTNode::Decl(
+                            clang_interface::VTableLayout_getVTableBase(layout, i)
+                        ));
+                        secondary_vtables.push((index as usize, base));
+                    }
+                    return secondary_vtables;
+                }
+            },
+            _ => {}
+        }
+        vec![]
+    }
+
     /// Is this cursor's referent a dynamic class (i.e. has a virtual pointer)?
     pub fn is_dynamic_class(&self) -> bool {
         match self.node {

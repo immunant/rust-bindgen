@@ -11,6 +11,10 @@
 pub struct Base__bindgen_vtable {
     _offset_to_top_0: isize,
     _rtti: *const ::std::os::raw::c_void,
+    vfns: Base__bindgen_vfns,
+}
+#[repr(C)]
+pub struct Base__bindgen_vfns {
     AsDerived: ::std::option::Option<
         unsafe extern "C" fn(this: *mut ::std::os::raw::c_void) -> *mut Derived,
     >,
@@ -18,7 +22,7 @@ pub struct Base__bindgen_vtable {
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct Base {
-    pub vtable_: *const Base__bindgen_vtable,
+    pub vtable_: *const Base__bindgen_vfns,
 }
 #[test]
 fn bindgen_test_layout_Base() {
@@ -43,9 +47,21 @@ extern "C" {
     pub fn Base_AsDerived(this: *mut ::std::os::raw::c_void) -> *mut Derived;
 }
 #[repr(C)]
+pub struct Derived__bindgen_vtable {
+    _offset_to_top_0: isize,
+    _rtti: *const ::std::os::raw::c_void,
+    vfns: Derived__bindgen_vfns,
+}
+#[repr(C)]
+pub struct Derived__bindgen_vfns {
+    AsDerived: ::std::option::Option<
+        unsafe extern "C" fn(this: *mut ::std::os::raw::c_void) -> *mut Derived,
+    >,
+}
+#[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct Derived {
-    pub _base: Base,
+    pub vtable_: *const Derived__bindgen_vfns,
 }
 #[test]
 fn bindgen_test_layout_Derived() {
