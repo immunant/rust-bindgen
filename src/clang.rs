@@ -7,6 +7,7 @@
 use cexpr;
 use ir::context::BindgenContext;
 use regex;
+use std::convert::TryInto;
 use std::ffi::{CStr, CString};
 use std::fmt;
 use std::hash::Hash;
@@ -717,6 +718,25 @@ impl Cursor {
         found
     }
 
+    /// Visit all direct and indirect virtual bases of this class.
+    pub fn visit_virtual_bases<Visitor>(&self, mut visitor: Visitor)
+    where
+        Visitor: FnMut(Cursor) -> CXChildVisitResult,
+    {
+        match self.node {
+            ASTNode::Decl(d) => unsafe {
+                clang_interface::CXXRecordDecl_visitVBases(
+                    d,
+                    self.kind,
+                    Some(visit_children::<Visitor>),
+                    self.unit,
+                    mem::transmute(&mut visitor),
+                )
+            },
+            _ => {}
+        }
+    }
+
     /// Is the referent an inlined function?
     pub fn is_inlined_function(&self) -> bool {
         match self.node {
@@ -989,6 +1009,81 @@ impl Cursor {
                 clang_interface::CXXBaseSpecifier_isVirtualBase(b)
             },
             _ => false,
+        }
+    }
+
+    pub fn get_primary_base(&self) -> Option<Cursor> {
+        match self.node {
+            ASTNode::Decl(d) => unsafe {
+                let base = clang_interface::CXXRecordDecl_getPrimaryBase(d, self.context());
+                if !base.is_null() {
+                    return Some(self.with_node(ASTNode::Decl(base)));
+                }
+            },
+            _ => {}
+        }
+        None
+    }
+
+    pub fn get_vtable_components(&self) -> Option<VTableComponentIterator> {
+        match self.node {
+            ASTNode::Decl(d) => unsafe {
+                let layout = clang_interface::CXXRecordDecl_getVTableLayout(d, self.context());
+                if !layout.is_null() {
+                    let length = clang_interface::VTableLayout_componentCount(layout);
+                    return Some(VTableComponentIterator {
+                        layout,
+                        unit: self.unit,
+                        length,
+                        index: 0,
+                    });
+                }
+            },
+            _ => {}
+        }
+        None
+    }
+
+    pub fn get_secondary_vtables(&self) -> Vec<(usize, Cursor)> {
+        match self.node {
+            ASTNode::Decl(d) => unsafe {
+                let layout = clang_interface::CXXRecordDecl_getVTableLayout(d, self.context());
+                if !layout.is_null() {
+                    let mut secondary_vtables = vec![];
+                    let count = clang_interface::VTableLayout_getNumVTables(layout);
+                    for i in 1..count {
+                        let index = clang_interface::VTableLayout_getVTableOffset(layout, i);
+                        let base = self.with_node(ASTNode::Decl(
+                            clang_interface::VTableLayout_getVTableBase(layout, i)
+                        ));
+                        secondary_vtables.push((index as usize, base));
+                    }
+                    return secondary_vtables;
+                }
+            },
+            _ => {}
+        }
+        vec![]
+    }
+
+    /// Is this cursor's referent a dynamic class (i.e. has a virtual pointer)?
+    pub fn is_dynamic_class(&self) -> bool {
+        match self.node {
+            ASTNode::Decl(d) => unsafe {
+                clang_interface::Decl_isDynamicClass(d)
+            },
+            _ => false,
+        }
+    }
+
+    pub fn base_offset(&self, base: &Cursor) -> Option<usize> {
+        match (self.node, base.node) {
+            (ASTNode::Decl(d), ASTNode::CXXBaseSpecifier(b)) => unsafe {
+                clang_interface::CXXRecordDecl_baseClassOffset(d, b, self.context())
+                    .try_into()
+                    .ok()
+            },
+            _ => None,
         }
     }
 
@@ -1723,6 +1818,86 @@ impl ExactSizeIterator for TypeTemplateArgIterator {
         (self.length - self.index) as usize
     }
 }
+
+pub enum VTableComponent {
+    VCallOffset(i64),
+    VBaseOffset(i64),
+    OffsetToTop(i64),
+    RTTI(Cursor),
+    FunctionPointer(Cursor),
+    CompleteDtorPointer(Cursor),
+    DeletingDtorPointer(Cursor),
+    UnusedFunctionPointer(Cursor),
+}
+
+impl VTableComponent {
+    fn new(
+        component: *const clang_interface::clang_VTableComponent,
+        unit: *mut clang_interface::clang_ASTUnit,
+    ) -> Self {
+        assert!(!component.is_null());
+        use self::clang_interface::VTableComponentKind;
+        let kind = unsafe { clang_interface::VTableComponent_getKind(component) };
+        match kind {
+            VTableComponentKind::CK_VCallOffset => {
+                let offset = unsafe { clang_interface::VTableComponent_getOffset(component) };
+                VTableComponent::VCallOffset(offset)
+            }
+            VTableComponentKind::CK_VBaseOffset => {
+                let offset = unsafe { clang_interface::VTableComponent_getOffset(component) };
+                VTableComponent::VBaseOffset(offset)
+            }
+            VTableComponentKind::CK_OffsetToTop => {
+                let offset = unsafe { clang_interface::VTableComponent_getOffset(component) };
+                VTableComponent::OffsetToTop(offset)
+            }
+            VTableComponentKind::CK_RTTI => {
+                let decl = unsafe { clang_interface::VTableComponent_getDecl(component) };
+                VTableComponent::RTTI(Cursor::new(ASTNode::Decl(decl), unit))
+            }
+            VTableComponentKind::CK_FunctionPointer => {
+                let decl = unsafe { clang_interface::VTableComponent_getDecl(component) };
+                VTableComponent::FunctionPointer(Cursor::new(ASTNode::Decl(decl), unit))
+            }
+            VTableComponentKind::CK_CompleteDtorPointer => {
+                let decl = unsafe { clang_interface::VTableComponent_getDecl(component) };
+                VTableComponent::CompleteDtorPointer(Cursor::new(ASTNode::Decl(decl), unit))
+            }
+            VTableComponentKind::CK_DeletingDtorPointer => {
+                let decl = unsafe { clang_interface::VTableComponent_getDecl(component) };
+                VTableComponent::DeletingDtorPointer(Cursor::new(ASTNode::Decl(decl), unit))
+            }
+            VTableComponentKind::CK_UnusedFunctionPointer => {
+                let decl = unsafe { clang_interface::VTableComponent_getDecl(component) };
+                VTableComponent::UnusedFunctionPointer(Cursor::new(ASTNode::Decl(decl), unit))
+            }
+            _ => unreachable!("Invalid VTableComponent Kind: {}", kind),
+        }
+    }
+}
+
+pub struct VTableComponentIterator {
+    layout: *const clang_interface::clang_VTableLayout,
+    unit: *mut clang_interface::clang_ASTUnit,
+    length: u32,
+    index: u32,
+}
+
+impl Iterator for VTableComponentIterator {
+    type Item = VTableComponent;
+    fn next(&mut self) -> Option<VTableComponent> {
+        if self.index < self.length {
+            let component = unsafe {
+                clang_interface::VTableLayout_getComponent(self.layout, self.index)
+            };
+            self.index += 1;
+            Some(VTableComponent::new(component, self.unit))
+        } else {
+            None
+        }
+    }
+}
+        
 
 /// A `SourceLocation` is a file, line, column, and byte offset location for
 /// some source text.

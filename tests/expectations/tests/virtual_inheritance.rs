@@ -31,12 +31,20 @@ fn bindgen_test_layout_A() {
     );
 }
 #[repr(C)]
-pub struct B__bindgen_vtable(::std::os::raw::c_void);
+pub struct B__bindgen_vtable {
+    _vbase_offset_0: isize,
+    _offset_to_top_0: isize,
+    _rtti: *const ::std::os::raw::c_void,
+    vfns: B__bindgen_vfns,
+}
+#[repr(C)]
+pub struct B__bindgen_vfns {}
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct B {
-    pub vtable_: *const B__bindgen_vtable,
+    pub vtable_: *const B__bindgen_vfns,
     pub bar: ::std::os::raw::c_int,
+    pub foo: ::std::os::raw::c_int,
 }
 #[test]
 fn bindgen_test_layout_B() {
@@ -62,12 +70,20 @@ impl Default for B {
     }
 }
 #[repr(C)]
-pub struct C__bindgen_vtable(::std::os::raw::c_void);
+pub struct C__bindgen_vtable {
+    _vbase_offset_0: isize,
+    _offset_to_top_0: isize,
+    _rtti: *const ::std::os::raw::c_void,
+    vfns: C__bindgen_vfns,
+}
+#[repr(C)]
+pub struct C__bindgen_vfns {}
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct C {
-    pub vtable_: *const C__bindgen_vtable,
+    pub vtable_: *const C__bindgen_vfns,
     pub baz: ::std::os::raw::c_int,
+    pub foo: ::std::os::raw::c_int,
 }
 #[test]
 fn bindgen_test_layout_C() {
@@ -93,11 +109,24 @@ impl Default for C {
     }
 }
 #[repr(C)]
+pub struct D__bindgen_vtable {
+    _vbase_offset_0: isize,
+    _offset_to_top_0: isize,
+    _rtti: *const ::std::os::raw::c_void,
+    vfns: D__bindgen_vfns,
+    _base_B: B__bindgen_vtable,
+}
+#[repr(C)]
+pub struct D__bindgen_vfns {}
+#[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct D {
-    pub _base: C,
-    pub _base_1: B,
+    pub vtable_: *const D__bindgen_vfns,
+    pub baz: ::std::os::raw::c_int,
+    pub vtable_: *const B__bindgen_vfns,
+    pub bar: ::std::os::raw::c_int,
     pub bazz: ::std::os::raw::c_int,
+    pub foo: ::std::os::raw::c_int,
 }
 #[test]
 fn bindgen_test_layout_D() {

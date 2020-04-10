@@ -15,6 +15,7 @@ use ir::derive::CanDeriveCopy;
 use parse::{ClangItemParser, ParseError};
 use peeking_take_while::PeekableExt;
 use std::cmp;
+use std::convert::TryInto;
 use std::io;
 use std::mem;
 use HashMap;
@@ -955,6 +956,8 @@ pub struct Base {
     pub kind: BaseKind,
     /// Name of the field in which this base should be stored.
     pub field_name: String,
+    /// Offset of the start of this base in its child record
+    pub offset: Option<usize>,
 }
 
 impl Base {
@@ -982,6 +985,48 @@ impl Base {
 
         true
     }
+}
+
+#[derive(Clone, Debug)]
+pub struct VTable {
+    entries: Vec<VTableEntry>,
+
+    // Class types of secondary vtables inside this vtable
+    secondary_vtables: Vec<(usize, TypeId)>,
+}
+
+impl VTable {
+    pub fn primary_size(&self) -> usize {
+        if self.secondary_vtables.is_empty() {
+            self.entries.len()
+        } else {
+            self.secondary_vtables[0].0
+        }
+    }
+
+    pub fn entries(&self) -> &[VTableEntry] {
+        &self.entries
+    }
+
+    pub fn primary_entries(&self) -> &[VTableEntry] {
+        &self.entries[..self.primary_size()]
+    }
+
+    pub fn secondary_vtables(&self) -> &[(usize, TypeId)] {
+        &self.secondary_vtables
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum VTableEntry {
+    VCallOffset(isize),
+    VBaseOffset(isize),
+    OffsetToTop(isize),
+    RTTI,
+    FunctionPointer(FunctionId),
+    CompleteDtorPointer(FunctionId),
+    DeletingDtorPointer(FunctionId),
+    UnusedFunctionPointer(FunctionId),
 }
 
 /// A compound type.
@@ -1013,8 +1058,15 @@ pub struct CompInfo {
     /// is virtual.
     destructor: Option<(MethodKind, FunctionId)>,
 
-    /// Vector of classes this one inherits from.
-    base_members: Vec<Base>,
+    /// Vector of direct base classes this one inherits from.
+    direct_bases: Vec<Base>,
+
+    /// Primary base of this class, if any.
+    primary_base: Option<TypeId>,
+
+    /// Virtual base classes this class inherits from, either directly or
+    /// indirectly.
+    virtual_bases: Vec<Base>,
 
     /// The inner types that were declared inside this class, in something like:
     ///
@@ -1030,6 +1082,8 @@ pub struct CompInfo {
 
     /// Set of static constants declared inside this class.
     inner_vars: Vec<VarId>,
+
+    vtable: Option<VTable>,
 
     /// Whether this type should generate an vtable (TODO: Should be able to
     /// look at the virtual methods and ditch this field).
@@ -1061,6 +1115,10 @@ pub struct CompInfo {
     /// Used to indicate when a struct has been forward declared. Usually used
     /// in headers so that APIs can't modify them directly.
     is_forward_declaration: bool,
+
+    /// Indicates if this is a dynamic class, i.e. a class that requires a
+    /// virtual pointer.
+    is_dynamic_class: bool,
 }
 
 impl CompInfo {
@@ -1073,9 +1131,12 @@ impl CompInfo {
             methods: vec![],
             constructors: vec![],
             destructor: None,
-            base_members: vec![],
+            direct_bases: vec![],
+            primary_base: None,
+            virtual_bases: vec![],
             inner_types: vec![],
             inner_vars: vec![],
+            vtable: None,
             has_own_virtual_method: false,
             has_destructor: false,
             has_nonempty_base: false,
@@ -1083,6 +1144,7 @@ impl CompInfo {
             packed_attr: false,
             found_unknown_attr: false,
             is_forward_declaration: false,
+            is_dynamic_class: false,
         }
     }
 
@@ -1209,9 +1271,28 @@ impl CompInfo {
         self.kind() == CompKind::Union
     }
 
-    /// The set of types that this one inherits from.
+    /// The set of direct bases that this class inherits from.
     pub fn base_members(&self) -> &[Base] {
-        &self.base_members
+        &self.direct_bases
+    }
+
+    /// Primary base of this class, if any.
+    pub fn primary_base(&self) -> Option<TypeId> {
+        self.primary_base
+    }
+
+    pub fn is_dynamic_class(&self) -> bool {
+        self.is_dynamic_class
+    }
+
+    /// The set of virtual bases this class inherits from, directly or
+    /// indirectly.
+    pub fn virtual_bases(&self) -> &[Base] {
+        &self.virtual_bases
+    }
+
+    pub fn vtable(&self) -> Option<&VTable> {
+        self.vtable.as_ref()
     }
 
     /// Construct a new compound type from a Clang type.
@@ -1246,6 +1327,65 @@ impl CompInfo {
                 CXCursor_ClassDecl => !cur.is_definition(),
                 _ => false,
             });
+
+        ci.is_dynamic_class = cursor.is_dynamic_class();
+        if let Some(primary_base) = cursor.get_primary_base() {
+            let base_type = Item::from_ty_or_ref(
+                primary_base.cur_type(),
+                primary_base,
+                None,
+                ctx,
+            );
+            ci.primary_base = Some(base_type);
+        }
+
+        if let Some(components) = cursor.get_vtable_components() {
+            let entries = components.map(|component| {
+                match component {
+                    VTableComponent::VCallOffset(offset) =>
+                        VTableEntry::VCallOffset(offset.try_into().unwrap()),
+                    VTableComponent::VBaseOffset(offset) =>
+                        VTableEntry::VBaseOffset(offset.try_into().unwrap()),
+                    VTableComponent::OffsetToTop(offset) =>
+                        VTableEntry::OffsetToTop(offset.try_into().unwrap()),
+                    VTableComponent::RTTI(_) => VTableEntry::RTTI,
+                    VTableComponent::FunctionPointer(cur) |
+                    VTableComponent::CompleteDtorPointer(cur) |
+                    VTableComponent::DeletingDtorPointer(cur) |
+                    VTableComponent::UnusedFunctionPointer(cur) => {
+                        let item = Item::parse(cur, Some(potential_id), ctx)
+                            .expect("Could not resolve vtable function pointer");
+                        let id = item.expect_function_id(ctx);
+                        match component {
+                            VTableComponent::FunctionPointer(_) =>
+                                VTableEntry::FunctionPointer(id),
+                            VTableComponent::CompleteDtorPointer(_) =>
+                                VTableEntry::CompleteDtorPointer(id),
+                            VTableComponent::DeletingDtorPointer(_) =>
+                                VTableEntry::DeletingDtorPointer(id),
+                            VTableComponent::UnusedFunctionPointer(_) =>
+                                VTableEntry::UnusedFunctionPointer(id),
+                            _ => unreachable!("Other arms handled in outer match"),
+                        }
+                    }
+                }
+            }).collect();
+
+            let mut secondary_vtables = cursor
+                .get_secondary_vtables();
+            secondary_vtables.sort_by_key(|(index, _)| *index);
+            let secondary_vtables = secondary_vtables
+                .into_iter()
+                .map(|(index, cur)| {
+                    (index, Item::from_ty_or_ref(cur.cur_type(), cur, None, ctx))
+                })
+                .collect();
+
+            ci.vtable = Some(VTable {
+                entries,
+                secondary_vtables,
+            });
+        }
 
         let mut maybe_anonymous_struct_field = None;
         cursor.visit(|cur| {
@@ -1401,16 +1541,18 @@ impl CompInfo {
                         BaseKind::Normal
                     };
 
-                    let field_name = match ci.base_members.len() {
+                    let field_name = match ci.direct_bases.len() {
                         0 => "_base".into(),
                         n => format!("_base_{}", n),
                     };
                     let type_id =
                         Item::from_ty_or_ref(cur.cur_type(), cur, None, ctx);
-                    ci.base_members.push(Base {
+                    let offset = cursor.base_offset(&cur);
+                    ci.direct_bases.push(Base {
                         ty: type_id,
                         kind: kind,
                         field_name: field_name,
+                        offset: offset,
                     });
                 }
                 CXCursor_Constructor | CXCursor_Destructor |
@@ -1504,8 +1646,8 @@ impl CompInfo {
                     }
 
                     if let Ok(item) = Item::parse(cur, Some(potential_id), ctx)
-                    {
-                        ci.inner_vars.push(item.as_var_id_unchecked());
+                    { 
+                       ci.inner_vars.push(item.as_var_id_unchecked());
                     }
                 }
                 // Intentionally not handled
@@ -1523,6 +1665,26 @@ impl CompInfo {
                     );
                 }
             }
+            CXChildVisit_Continue
+        });
+
+        cursor.visit_virtual_bases(|vbase| {
+            assert!(vbase.is_virtual_base());
+
+            let field_name = match ci.virtual_bases.len() {
+                0 => "_vbase".into(),
+                n => format!("_vbase_{}", n),
+            };
+            let type_id =
+                Item::from_ty_or_ref(vbase.cur_type(), vbase, None, ctx);
+            let offset = cursor.base_offset(&vbase);
+            ci.virtual_bases.push(Base {
+                ty: type_id,
+                kind: BaseKind::Virtual,
+                field_name: field_name,
+                offset: offset,
+            });
+
             CXChildVisit_Continue
         });
 

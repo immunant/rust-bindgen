@@ -8,11 +8,23 @@
 )]
 
 #[repr(C)]
-pub struct nsISupports__bindgen_vtable(::std::os::raw::c_void);
+pub struct nsISupports__bindgen_vtable {
+    _offset_to_top_0: isize,
+    _rtti: *const ::std::os::raw::c_void,
+    vfns: nsISupports__bindgen_vfns,
+}
+#[repr(C)]
+pub struct nsISupports__bindgen_vfns {
+    QueryInterface: ::std::option::Option<
+        unsafe extern "C" fn(
+            this: *mut ::std::os::raw::c_void,
+        ) -> *mut nsISupports,
+    >,
+}
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct nsISupports {
-    pub vtable_: *const nsISupports__bindgen_vtable,
+    pub vtable_: *const nsISupports__bindgen_vfns,
 }
 #[test]
 fn bindgen_test_layout_nsISupports() {
@@ -39,9 +51,23 @@ extern "C" {
     ) -> *mut nsISupports;
 }
 #[repr(C)]
+pub struct nsIRunnable__bindgen_vtable {
+    _offset_to_top_0: isize,
+    _rtti: *const ::std::os::raw::c_void,
+    vfns: nsIRunnable__bindgen_vfns,
+}
+#[repr(C)]
+pub struct nsIRunnable__bindgen_vfns {
+    QueryInterface: ::std::option::Option<
+        unsafe extern "C" fn(
+            this: *mut ::std::os::raw::c_void,
+        ) -> *mut nsISupports,
+    >,
+}
+#[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct nsIRunnable {
-    pub _base: nsISupports,
+    pub vtable_: *const nsIRunnable__bindgen_vfns,
 }
 #[test]
 fn bindgen_test_layout_nsIRunnable() {
@@ -62,9 +88,23 @@ impl Default for nsIRunnable {
     }
 }
 #[repr(C)]
+pub struct Runnable__bindgen_vtable {
+    _offset_to_top_0: isize,
+    _rtti: *const ::std::os::raw::c_void,
+    vfns: Runnable__bindgen_vfns,
+}
+#[repr(C)]
+pub struct Runnable__bindgen_vfns {
+    QueryInterface: ::std::option::Option<
+        unsafe extern "C" fn(
+            this: *mut ::std::os::raw::c_void,
+        ) -> *mut nsISupports,
+    >,
+}
+#[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct Runnable {
-    pub _base: nsIRunnable,
+    pub vtable_: *const nsIRunnable__bindgen_vfns,
 }
 #[test]
 fn bindgen_test_layout_Runnable() {

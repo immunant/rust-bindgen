@@ -8,11 +8,30 @@
 )]
 
 #[repr(C)]
-pub struct C__bindgen_vtable(::std::os::raw::c_void);
+pub struct C__bindgen_vtable {
+    _offset_to_top_0: isize,
+    _rtti: *const ::std::os::raw::c_void,
+    vfns: C__bindgen_vfns,
+}
+#[repr(C)]
+pub struct C__bindgen_vfns {
+    do_thing: ::std::option::Option<
+        unsafe extern "C" fn(
+            this: *mut ::std::os::raw::c_void,
+            arg1: ::std::os::raw::c_char,
+        ),
+    >,
+    do_thing: ::std::option::Option<
+        unsafe extern "C" fn(
+            this: *mut ::std::os::raw::c_void,
+            arg1: ::std::os::raw::c_int,
+        ),
+    >,
+}
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct C {
-    pub vtable_: *const C__bindgen_vtable,
+    pub vtable_: *const C__bindgen_vfns,
 }
 #[test]
 fn bindgen_test_layout_C() {

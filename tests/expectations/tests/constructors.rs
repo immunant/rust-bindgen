@@ -26,27 +26,37 @@ fn bindgen_test_layout_TestOverload() {
     );
 }
 extern "C" {
+    #[link_name = "\u{1}_ZN12TestOverloadC1Ev"]
+    fn TestOverload_TestOverload(this: *mut TestOverload);
+}
+extern "C" {
     #[link_name = "\u{1}_ZN12TestOverloadC1Ei"]
-    pub fn TestOverload_TestOverload(
+    pub fn TestOverload_TestOverload1(
         this: *mut TestOverload,
         arg1: ::std::os::raw::c_int,
     );
 }
 extern "C" {
     #[link_name = "\u{1}_ZN12TestOverloadC1Ed"]
-    pub fn TestOverload_TestOverload1(this: *mut TestOverload, arg1: f64);
+    pub fn TestOverload_TestOverload2(this: *mut TestOverload, arg1: f64);
 }
 impl TestOverload {
     #[inline]
-    pub unsafe fn new(arg1: ::std::os::raw::c_int) -> Self {
+    pub unsafe fn new() -> Self {
         let mut __bindgen_tmp = ::std::mem::MaybeUninit::uninit();
-        TestOverload_TestOverload(__bindgen_tmp.as_mut_ptr(), arg1);
+        TestOverload_TestOverload(__bindgen_tmp.as_mut_ptr());
         __bindgen_tmp.assume_init()
     }
     #[inline]
-    pub unsafe fn new1(arg1: f64) -> Self {
+    pub unsafe fn new1(arg1: ::std::os::raw::c_int) -> Self {
         let mut __bindgen_tmp = ::std::mem::MaybeUninit::uninit();
         TestOverload_TestOverload1(__bindgen_tmp.as_mut_ptr(), arg1);
+        __bindgen_tmp.assume_init()
+    }
+    #[inline]
+    pub unsafe fn new2(arg1: f64) -> Self {
+        let mut __bindgen_tmp = ::std::mem::MaybeUninit::uninit();
+        TestOverload_TestOverload2(__bindgen_tmp.as_mut_ptr(), arg1);
         __bindgen_tmp.assume_init()
     }
 }

@@ -137,6 +137,7 @@ mod clang_ast {
             }
         }
 
+        println!("cargo:rerun-if-changed=src/clang/CMakeLists.txt");
         println!("cargo:rerun-if-changed=src/clang/clang_interface.hpp");
         println!("cargo:rerun-if-changed=src/clang/clang_interface_impl.hpp");
         println!("cargo:rerun-if-changed=src/clang/clang_interface.cpp");

@@ -90,7 +90,7 @@ where
 pub const _GLIBCXX_CSTDINT: u32 = 1;
 pub const _GLIBCXX_CXX_CONFIG_H: u32 = 1;
 pub const _GLIBCXX_RELEASE: u32 = 9;
-pub const __GLIBCXX__: u32 = 20200130;
+pub const __GLIBCXX__: u32 = 20200312;
 pub const _GLIBCXX_HAVE_ATTRIBUTE_VISIBILITY: u32 = 1;
 pub const _GLIBCXX_USE_DEPRECATED: u32 = 1;
 pub const _GLIBCXX_EXTERN_TEMPLATE: u32 = 1;
@@ -6643,6 +6643,16 @@ pub struct clang_PreprocessedEntity {
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
+pub struct clang_VTableLayout {
+    _unused: [u8; 0],
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct clang_VTableComponent {
+    _unused: [u8; 0],
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct clang_comments_Comment {
     _unused: [u8; 0],
 }
@@ -6650,6 +6660,26 @@ pub struct clang_comments_Comment {
 #[derive(Debug, Copy, Clone)]
 pub struct clang_comments_FullComment {
     _unused: [u8; 0],
+}
+pub mod VTableComponentKind {
+    pub type Type = u32;
+    pub const CK_VCallOffset: Type = 0;
+    pub const CK_VBaseOffset: Type = 1;
+    pub const CK_OffsetToTop: Type = 2;
+    pub const CK_RTTI: Type = 3;
+    pub const CK_FunctionPointer: Type = 4;
+    #[doc = " A pointer to the complete destructor."]
+    pub const CK_CompleteDtorPointer: Type = 5;
+    #[doc = " A pointer to the deleting destructor."]
+    pub const CK_DeletingDtorPointer: Type = 6;
+    #[doc = " An entry that is never used."]
+    #[doc = ""]
+    #[doc = " In some cases, a vtable function pointer will end up never being"]
+    #[doc = " called. Such vtable function pointers are represented as a"]
+    #[doc = " CK_UnusedFunctionPointer."]
+    pub const CK_UnusedFunctionPointer: Type = 7;
+    #[doc = " Error value indicating that this component's kind could not be retreived."]
+    pub const CK_Invalid: Type = 8;
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -7059,6 +7089,9 @@ extern "C" {
     ) -> BindgenQualType;
 }
 extern "C" {
+    pub fn Decl_isDynamicClass(arg1: *const clang_Decl) -> bool;
+}
+extern "C" {
     pub fn Expr_getArgument(
         E: *const clang_Expr,
         i: ::std::os::raw::c_uint,
@@ -7266,6 +7299,15 @@ extern "C" {
     );
 }
 extern "C" {
+    pub fn CXXRecordDecl_visitVBases(
+        Parent: *const clang_Decl,
+        kind: CXCursorKind::Type,
+        V: Visitor,
+        Unit: *mut clang_ASTUnit,
+        data: CXClientData,
+    );
+}
+extern "C" {
     pub fn tokenize(
         TU: *mut clang_ASTUnit,
         Range: BindgenSourceRange,
@@ -7450,6 +7492,67 @@ extern "C" {
     pub fn CXXBaseSpecifier_getLocation(
         arg1: *const clang_CXXBaseSpecifier,
     ) -> *mut clang_SourceLocation;
+}
+extern "C" {
+    pub fn CXXRecordDecl_baseClassOffset(
+        arg1: *const clang_Decl,
+        arg2: *const clang_CXXBaseSpecifier,
+        arg3: *mut clang_ASTContext,
+    ) -> i64;
+}
+extern "C" {
+    pub fn CXXRecordDecl_getPrimaryBase(
+        arg1: *const clang_Decl,
+        arg2: *mut clang_ASTContext,
+    ) -> *const clang_Decl;
+}
+extern "C" {
+    pub fn CXXRecordDecl_getVTableLayout(
+        arg1: *const clang_Decl,
+        arg2: *mut clang_ASTContext,
+    ) -> *const clang_VTableLayout;
+}
+extern "C" {
+    pub fn VTableLayout_componentCount(
+        arg1: *const clang_VTableLayout,
+    ) -> ::std::os::raw::c_uint;
+}
+extern "C" {
+    pub fn VTableLayout_getNumVTables(
+        arg1: *const clang_VTableLayout,
+    ) -> size_t;
+}
+extern "C" {
+    pub fn VTableLayout_getVTableOffset(
+        arg1: *const clang_VTableLayout,
+        index: size_t,
+    ) -> size_t;
+}
+extern "C" {
+    pub fn VTableLayout_getVTableBase(
+        arg1: *const clang_VTableLayout,
+        index: size_t,
+    ) -> *const clang_Decl;
+}
+extern "C" {
+    pub fn VTableLayout_getComponent(
+        arg1: *const clang_VTableLayout,
+        arg2: ::std::os::raw::c_uint,
+    ) -> *const clang_VTableComponent;
+}
+extern "C" {
+    pub fn VTableComponent_getKind(
+        arg1: *const clang_VTableComponent,
+    ) -> VTableComponentKind::Type;
+}
+extern "C" {
+    pub fn VTableComponent_getOffset(arg1: *const clang_VTableComponent)
+        -> i64;
+}
+extern "C" {
+    pub fn VTableComponent_getDecl(
+        arg1: *const clang_VTableComponent,
+    ) -> *const clang_Decl;
 }
 extern "C" {
     pub fn Attr_getLocation(
